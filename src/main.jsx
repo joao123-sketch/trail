@@ -200,10 +200,25 @@ const initialStudies = [
 ];
 
 function App() {
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('trail_current_user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    // 1. Verificar se já existe uma sessão ativa no Supabase ao carregar
+    async function recoverSession() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setCurrentUser({
+          id: session.user.id,
+          username: session.user.email.split('@')[0],
+          role: session.user.email.includes('admin') ? 'admin' : 'user'
+        });
+      }
+      setAuthChecked(true);
+    }
+    recoverSession();
+  }, []);
+
   const [users, setUsers] = useState(() => {
     const saved = localStorage.getItem('trail_users');
     return saved ? JSON.parse(saved) : [{ id: 'admin', username: 'admin', password: '123', role: 'admin' }];
@@ -499,13 +514,16 @@ function App() {
     setFrictionTask(null);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setCurrentUser(null);
     setActiveView('dashboard');
   };
 
+  if (!authChecked) return <div className="login-screen"><div className="login-card">Carregando sessão...</div></div>;
+
   if (!currentUser) {
-    return <Login onLogin={setCurrentUser} users={users} />;
+    return <Login onLogin={setCurrentUser} />;
   }
 
   if (focusSession) {
