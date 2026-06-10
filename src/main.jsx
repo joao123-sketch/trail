@@ -200,19 +200,6 @@ const initialStudies = [
 ];
 
 function App() {
-  useEffect(() => {
-    async function testarSupabase() {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*');
-
-      console.log('DATA:', data);
-      console.log('ERROR:', error);
-    }
-
-    testarSupabase();
-  }, []);
-
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('trail_current_user');
     return saved ? JSON.parse(saved) : null;
