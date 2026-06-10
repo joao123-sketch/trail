@@ -1028,12 +1028,18 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
     event.preventDefault();
     if (!habitName.trim()) return;
     
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert('Sessão expirada. Por favor, saia e entre novamente.');
+      return;
+    }
+
     const newHabit = {
       name: habitName,
       days: selectedDays,
       time: habitTime,
       duration: Number(habitDuration),
-      user_id: (await supabase.auth.getUser()).data.user?.id
+      user_id: user.id
     };
 
     const { data: savedHabit, error } = await supabase
@@ -1046,6 +1052,7 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
       setHabitName('');
     } else {
       console.error('Erro ao salvar hábito:', error);
+      alert('Erro no Supabase (Hábitos): ' + (error?.message || 'Erro desconhecido'));
     }
   };
 
