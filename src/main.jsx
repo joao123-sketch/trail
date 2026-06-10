@@ -251,29 +251,58 @@ function App() {
         .eq('user_id', uId);
 
       if (!tasksError) {
-        if (dbTasks.length > 0) {
-          setTasks(dbTasks.sort((a, b) => a.time.localeCompare(b.time)));
-        } else {
-          // Se não houver nada no banco, usamos as iniciais
-          setTasks(initialTasks.sort((a, b) => a.time.localeCompare(b.time)));
-        }
+        setTasks(dbTasks.length > 0 ? dbTasks.sort((a, b) => a.time.localeCompare(b.time)) : initialTasks.sort((a, b) => a.time.localeCompare(b.time)));
       }
 
-      // 2. Carregar o restante do LocalStorage (por enquanto)
-      const savedHabits = localStorage.getItem(`trail_${uId}_habits`);
-      setHabits(savedHabits ? JSON.parse(savedHabits) : initialHabits);
+      // 2. Carregar Hábitos do Supabase
+      const { data: dbHabits, error: habitsError } = await supabase
+        .from('habits')
+        .select('*')
+        .eq('user_id', uId);
       
-      const savedStudies = localStorage.getItem(`trail_${uId}_studies`);
-      setStudies(savedStudies ? JSON.parse(savedStudies) : initialStudies);
+      if (!habitsError) {
+        setHabits(dbHabits.length > 0 ? dbHabits : initialHabits);
+      }
 
-      const savedJournal = localStorage.getItem(`trail_${uId}_journal`);
-      setJournalEntries(savedJournal ? JSON.parse(savedJournal) : []);
+      // 3. Carregar Diário do Supabase
+      const { data: dbJournal, error: journalError } = await supabase
+        .from('journal_entries')
+        .select('*')
+        .eq('user_id', uId);
+      
+      if (!journalError) {
+        setJournalEntries(dbJournal || []);
+      }
 
-      const savedMeals = localStorage.getItem(`trail_${uId}_meals`);
-      setMeals(savedMeals ? JSON.parse(savedMeals) : []);
+      // 4. Carregar Cardápio do Supabase
+      const { data: dbMeals, error: mealsError } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('user_id', uId);
+      
+      if (!mealsError) {
+        setMeals(dbMeals || []);
+      }
 
-      const savedWorkouts = localStorage.getItem(`trail_${uId}_workouts`);
-      setWorkouts(savedWorkouts ? JSON.parse(savedWorkouts) : []);
+      // 5. Carregar Treinos do Supabase
+      const { data: dbWorkouts, error: workoutsError } = await supabase
+        .from('workouts')
+        .select('*')
+        .eq('user_id', uId);
+      
+      if (!workoutsError) {
+        setWorkouts(dbWorkouts || []);
+      }
+
+      // 6. Carregar Estudos do Supabase
+      const { data: dbStudies, error: studiesError } = await supabase
+        .from('studies')
+        .select('*')
+        .eq('user_id', uId);
+      
+      if (!studiesError) {
+        setStudies(dbStudies.length > 0 ? dbStudies : initialStudies);
+      }
     }
 
     loadData();
@@ -547,24 +576,45 @@ function MealPlanner({ meals, setMeals }) {
     setSelectedDays((current) => (current.includes(day) ? current.filter((item) => item !== day) : [...current, day]));
   };
 
-  const addMeal = (e) => {
+  const addMeal = async (e) => {
     e.preventDefault();
     if (!description.trim() || selectedDays.length === 0) return;
     
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     const newMeals = selectedDays.map(day => ({
-      id: crypto.randomUUID(),
       day,
       type: mealType,
       time,
-      description
+      description,
+      user_id: user.id
     }));
     
-    setMeals([...meals, ...newMeals]);
-    setDescription('');
+    const { data: savedMeals, error } = await supabase
+      .from('meals')
+      .insert(newMeals)
+      .select();
+
+    if (!error && savedMeals) {
+      setMeals([...meals, ...savedMeals]);
+      setDescription('');
+    } else {
+      console.error('Erro ao salvar refeição:', error);
+    }
   };
 
-  const deleteMeal = (id) => {
-    setMeals(meals.filter(m => m.id !== id));
+  const deleteMeal = async (id) => {
+    const { error } = await supabase
+      .from('meals')
+      .delete()
+      .eq('id', id);
+
+    if (!error) {
+      setMeals(meals.filter(m => m.id !== id));
+    } else {
+      console.error('Erro ao deletar refeição:', error);
+    }
   };
 
   return (
@@ -656,26 +706,48 @@ function WorkoutTracker({ workouts, setWorkouts }) {
     setExerciseList(exerciseList.map(ex => ex.id === id ? { ...ex, [field]: value } : ex));
   };
 
-  const addWorkout = (e) => {
+  const addWorkout = async (e) => {
     e.preventDefault();
     if (!title.trim() || selectedDays.length === 0) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     const validExercises = exerciseList.filter(ex => ex.name.trim());
 
     const newWorkout = { 
-      id: crypto.randomUUID(), 
       title, 
       time, 
       days: selectedDays.join(', '), 
-      exercises: validExercises 
+      exercises: validExercises,
+      user_id: user.id
     };
-    setWorkouts([...workouts, newWorkout]);
-    setTitle('');
-    setExerciseList([{ id: crypto.randomUUID(), name: '', sets: '', reps: '' }]);
+
+    const { data: savedWorkout, error } = await supabase
+      .from('workouts')
+      .insert([newWorkout])
+      .select();
+
+    if (!error && savedWorkout) {
+      setWorkouts([...workouts, savedWorkout[0]]);
+      setTitle('');
+      setExerciseList([{ id: crypto.randomUUID(), name: '', sets: '', reps: '' }]);
+    } else {
+      console.error('Erro ao salvar treino:', error);
+    }
   };
 
-  const deleteWorkout = (id) => {
-    setWorkouts(workouts.filter(w => w.id !== id));
+  const deleteWorkout = async (id) => {
+    const { error } = await supabase
+      .from('workouts')
+      .delete()
+      .eq('id', id);
+
+    if (!error) {
+      setWorkouts(workouts.filter(w => w.id !== id));
+    } else {
+      console.error('Erro ao deletar treino:', error);
+    }
   };
 
   return (
@@ -947,11 +1019,29 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
   const [taskDuration, setTaskDuration] = useState(30);
   const [taskDate, setTaskDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const addHabit = (event) => {
+  const addHabit = async (event) => {
     event.preventDefault();
     if (!habitName.trim()) return;
-    setHabits((current) => [...current, { id: crypto.randomUUID(), name: habitName, days: selectedDays, time: habitTime, duration: Number(habitDuration) }]);
-    setHabitName('');
+    
+    const newHabit = {
+      name: habitName,
+      days: selectedDays,
+      time: habitTime,
+      duration: Number(habitDuration),
+      user_id: (await supabase.auth.getUser()).data.user?.id
+    };
+
+    const { data: savedHabit, error } = await supabase
+      .from('habits')
+      .insert([newHabit])
+      .select();
+
+    if (!error && savedHabit) {
+      setHabits((current) => [...current, savedHabit[0]]);
+      setHabitName('');
+    } else {
+      console.error('Erro ao salvar hábito:', error);
+    }
   };
 
   const addTask = async (event) => {
@@ -1436,22 +1526,40 @@ function Journal({ entries, setEntries }) {
     reader.readAsDataURL(file);
   };
 
-  const saveEntry = () => {
+  const saveEntry = async () => {
     const content = editorRef.current.innerHTML;
     if (!title.trim() && !content.trim()) return;
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     if (currentId) {
-      setEntries(prev => prev.map(e => e.id === currentId ? { ...e, title, content, image } : e));
+      const { error } = await supabase
+        .from('journal_entries')
+        .update({ title, content, image })
+        .eq('id', currentId);
+      
+      if (!error) {
+        setEntries(prev => prev.map(e => e.id === currentId ? { ...e, title, content, image } : e));
+      }
     } else {
       const newEntry = {
-        id: Date.now(),
         date: new Date().toLocaleDateString('pt-BR'),
         title: title || 'Sem título',
         content,
-        image
+        image,
+        user_id: user.id
       };
-      setEntries(prev => [newEntry, ...prev]);
-      setCurrentId(newEntry.id);
+
+      const { data: savedEntry, error } = await supabase
+        .from('journal_entries')
+        .insert([newEntry])
+        .select();
+
+      if (!error && savedEntry) {
+        setEntries(prev => [savedEntry[0], ...prev]);
+        setCurrentId(savedEntry[0].id);
+      }
     }
   };
 
@@ -1536,47 +1644,61 @@ function StudyBase({ studies, setStudies, setTasks }) {
     setSelectedDays((current) => (current.includes(day) ? current.filter((item) => item !== day) : [...current, day]));
   };
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     if (!draft.subject.trim() || selectedDays.length === 0) return;
     
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     if (editingId) {
-      setStudies(current => current.map(s => s.id === editingId ? { ...draft, id: editingId, days: selectedDays.join(', '), weeks } : s));
-      setEditingId(null);
+      const updatedStudy = { ...draft, days: selectedDays.join(', '), weeks };
+      const { error } = await supabase.from('studies').update(updatedStudy).eq('id', editingId);
+      if (!error) {
+        setStudies(current => current.map(s => s.id === editingId ? { ...updatedStudy, id: editingId } : s));
+        setEditingId(null);
+      }
     } else {
-      const studyId = crypto.randomUUID();
-      const newStudy = { ...draft, id: studyId, days: selectedDays.join(', '), weeks };
-      setStudies((current) => [...current, newStudy]);
+      const newStudy = { ...draft, days: selectedDays.join(', '), weeks, user_id: user.id };
+      const { data: savedStudy, error: studyError } = await supabase.from('studies').insert([newStudy]).select();
       
-      // Generate Avulsa Tasks (only for new studies to avoid duplicates on simple edits)
-      const newTasks = [];
-      const today = new Date();
-      
-      selectedDays.forEach(dayName => {
-        const dayIndex = weekDays.indexOf(dayName);
-        const targetJsDay = (dayIndex + 1) % 7;
+      if (!studyError && savedStudy) {
+        setStudies((current) => [...current, savedStudy[0]]);
         
-        for (let w = 0; w < weeks; w++) {
-          const date = new Date(today);
-          let diff = targetJsDay - date.getDay();
-          if (diff < 0) diff += 7;
+        // Generate Avulsa Tasks
+        const newTasks = [];
+        const today = new Date();
+        
+        selectedDays.forEach(dayName => {
+          const dayIndex = weekDays.indexOf(dayName);
+          const targetJsDay = (dayIndex + 1) % 7;
           
-          date.setDate(date.getDate() + diff + (w * 7));
-          const dateStr = date.toISOString().split('T')[0];
-          
-          newTasks.push({
-            id: Date.now() + Math.random(),
-            title: `Estudo: ${draft.subject}`,
-            type: 'avulsa',
-            time: draft.time,
-            duration: Number(draft.duration),
-            date: dateStr,
-            completed: false,
-            focusLabel: draft.subject
-          });
+          for (let w = 0; w < weeks; w++) {
+            const date = new Date(today);
+            let diff = targetJsDay - date.getDay();
+            if (diff < 0) diff += 7;
+            
+            date.setDate(date.getDate() + diff + (w * 7));
+            const dateStr = date.toISOString().split('T')[0];
+            
+            newTasks.push({
+              title: `Estudo: ${draft.subject}`,
+              type: 'avulsa',
+              time: draft.time,
+              duration: Number(draft.duration),
+              date: dateStr,
+              completed: false,
+              focusLabel: draft.subject,
+              user_id: user.id
+            });
+          }
+        });
+
+        const { data: savedTasks, error: tasksError } = await supabase.from('tasks').insert(newTasks).select();
+        if (!tasksError && savedTasks) {
+          setTasks((current) => [...current, ...savedTasks].sort((a, b) => a.time.localeCompare(b.time)));
         }
-      });
-      setTasks((current) => [...current, ...newTasks].sort((a, b) => a.time.localeCompare(b.time)));
+      }
     }
 
     setDraft({ subject: '', links: '', methodology: '', time: '18:00', duration: 45 });
@@ -1591,9 +1713,12 @@ function StudyBase({ studies, setStudies, setTasks }) {
     setWeeks(study.weeks);
   };
 
-  const deleteStudy = (id) => {
+  const deleteStudy = async (id) => {
     if (confirm('Deseja excluir este planejamento? As tarefas já geradas no calendário permanecerão.')) {
-      setStudies(current => current.filter(s => s.id !== id));
+      const { error } = await supabase.from('studies').delete().eq('id', id);
+      if (!error) {
+        setStudies(current => current.filter(s => s.id !== id));
+      }
     }
   };
 
