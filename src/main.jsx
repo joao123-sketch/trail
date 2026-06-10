@@ -1053,7 +1053,14 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
     event.preventDefault();
     if (!taskTitle.trim()) return;
 
-    const newTask = {
+    // Buscamos o ID real do usuário atual
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert('Sessão expirada. Por favor, saia e entre novamente.');
+      return;
+    }
+
+    const taskToSave = {
       title: taskTitle,
       type: 'avulsa',
       time: taskTime,
@@ -1061,15 +1068,8 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
       duration: Number(taskDuration),
       completed: false,
       focusLabel: taskTitle,
-      user_id: supabase.auth.getUser().then(({ data }) => data.user?.id) // Pegamos o ID do usuário logado
+      user_id: user.id
     };
-
-    // Buscamos o ID real do usuário atual
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const taskToSave = { ...newTask, user_id: user.id };
-    delete taskToSave.id; // Deixamos o Supabase gerar o ID serial/uuid se necessário
 
     const { data: savedTask, error } = await supabase
       .from('tasks')
@@ -1084,7 +1084,7 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
       setTaskTitle('');
     } else {
       console.error('Erro ao salvar tarefa:', error);
-      alert('Erro ao salvar no banco de dados');
+      alert('Erro no Supabase: ' + (error?.message || 'Erro desconhecido'));
     }
   };
 
