@@ -754,7 +754,7 @@ function Sidebar({ activeView, onNavigate, user, onLogout }) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <img src="/imagens/logo_sem_fundo.png" alt="Trail" />
+        <img src="/logo_sem_fundo.png" alt="Trail" />
         <div>
           <span>Trail</span>
         </div>
@@ -1697,7 +1697,7 @@ function Login({ onLogin, users }) {
     <div className="login-screen">
       <div className="login-card">
         <div className="brand" style={{ justifyContent: 'center', marginBottom: '32px' }}>
-          <img src="/imagens/logo_sem_fundo.png" alt="Trail" />
+          <img src="/logo_sem_fundo.png" alt="Trail" />
           <div><span>Trail</span></div>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
