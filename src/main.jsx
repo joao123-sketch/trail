@@ -1677,19 +1677,35 @@ function UserManagement({ users, setUsers }) {
   );
 }
 
-function Login({ onLogin, users }) {
-  const [username, setUsername] = useState('');
+function Login({ onLogin }) {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const uInput = username.trim().toLowerCase();
-    const user = users.find(u => u.username.trim().toLowerCase() === uInput && u.password === password);
-    if (user) {
-      onLogin(user);
-    } else {
-      setError('Credenciais inválidas');
+    setError('');
+    setLoading(true);
+
+    // Se o usuário não digitar um @, assumimos o domínio @trail.com para facilitar
+    const loginEmail = email.includes('@') ? email : `${email}@trail.com`;
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: loginEmail,
+      password: password,
+    });
+
+    if (authError) {
+      setError('Credenciais inválidas: ' + authError.message);
+      setLoading(false);
+    } else if (data.user) {
+      // Mapeamos o usuário do Supabase para o formato que o App já entende
+      onLogin({
+        id: data.user.id,
+        username: data.user.email.split('@')[0],
+        role: data.user.email.includes('admin') ? 'admin' : 'user'
+      });
     }
   };
 
@@ -1701,10 +1717,12 @@ function Login({ onLogin, users }) {
           <div><span>Trail</span></div>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
-          <label>Usuário<input value={username} onChange={(e) => setUsername(e.target.value)} required /></label>
+          <label>Usuário ou E-mail<input value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="ex: joao" /></label>
           <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           {error && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>{error}</p>}
-          <button className="primary-action xl" type="submit">Entrar no Sistema</button>
+          <button className="primary-action xl" type="submit" disabled={loading}>
+            {loading ? 'Entrando...' : 'Entrar no Sistema'}
+          </button>
         </form>
       </div>
     </div>
