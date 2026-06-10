@@ -235,13 +235,31 @@ function App() {
   }, [users]);
 
   useEffect(() => {
-    if (currentUser) {
+    async function loadData() {
+      if (!currentUser) {
+        localStorage.removeItem('trail_current_user');
+        return;
+      }
+
       localStorage.setItem('trail_current_user', JSON.stringify(currentUser));
       const uId = currentUser.id;
-      
-      const savedTasks = localStorage.getItem(`trail_${uId}_tasks`);
-      setTasks((savedTasks ? JSON.parse(savedTasks) : initialTasks).sort((a, b) => a.time.localeCompare(b.time)));
-      
+
+      // 1. Carregar Tarefas do Supabase
+      const { data: dbTasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', uId);
+
+      if (!tasksError) {
+        if (dbTasks.length > 0) {
+          setTasks(dbTasks.sort((a, b) => a.time.localeCompare(b.time)));
+        } else {
+          // Se não houver nada no banco, usamos as iniciais
+          setTasks(initialTasks.sort((a, b) => a.time.localeCompare(b.time)));
+        }
+      }
+
+      // 2. Carregar o restante do LocalStorage (por enquanto)
       const savedHabits = localStorage.getItem(`trail_${uId}_habits`);
       setHabits(savedHabits ? JSON.parse(savedHabits) : initialHabits);
       
@@ -256,14 +274,15 @@ function App() {
 
       const savedWorkouts = localStorage.getItem(`trail_${uId}_workouts`);
       setWorkouts(savedWorkouts ? JSON.parse(savedWorkouts) : []);
-    } else {
-      localStorage.removeItem('trail_current_user');
     }
+
+    loadData();
   }, [currentUser]);
 
-  useEffect(() => {
-    if (currentUser) localStorage.setItem(`trail_${currentUser.id}_tasks`, JSON.stringify(tasks));
-  }, [tasks, currentUser]);
+  // Removemos o useEffect que salvava tarefas no localStorage automaticamente
+  // useEffect(() => {
+  //   if (currentUser) localStorage.setItem(`trail_${currentUser.id}_tasks`, JSON.stringify(tasks));
+  // }, [tasks, currentUser]);
 
   useEffect(() => {
     if (currentUser) localStorage.setItem(`trail_${currentUser.id}_habits`, JSON.stringify(habits));
@@ -351,7 +370,10 @@ function App() {
     };
   }, [todaysTasks]);
 
-  const toggleTask = (task) => {
+  const toggleTask = async (task) => {
+    let updatedTask = null;
+    let isNewInstance = false;
+
     if (task.completed) {
       setFrictionTask(task);
       return;
@@ -362,39 +384,51 @@ function App() {
         const sourceType = task.sourceType || (task.isMeal ? 'meal' : task.isWorkout ? 'workout' : 'habit');
         const sourceId = task.sourceId || task.originalId || task.id;
         const occurrenceKey = task.occurrenceKey || getOccurrenceKey(sourceType, sourceId, date);
-        const completedTask = {
+        
+        updatedTask = {
           ...task,
-          id: crypto.randomUUID(),
+          id: undefined, // Let Supabase handle ID
           originalId: sourceId,
           sourceId,
           sourceType,
           occurrenceKey,
           date,
           completed: true,
-          type: 'rotina'
+          type: 'rotina',
+          user_id: currentUser.id
         };
-
-        setTasks(current => {
-          const existingIndex = current.findIndex(item => getStoredOccurrenceKey(item) === occurrenceKey);
-          if (existingIndex >= 0) {
-            return current.map((item, index) => (index === existingIndex ? { ...item, completed: true } : item));
-          }
-          return [...current, completedTask].sort((a, b) => a.time.localeCompare(b.time));
-        });
-        return;
-
-        // Create a unique ID for the completed instance but keep reference to original
-        setTasks(current => [...current, { 
-          ...task, 
-          id: crypto.randomUUID(), 
-          originalId: task.id, 
-          date: new Date().toISOString().split('T')[0], 
-          completed: true, 
-          type: 'avulsa', 
-          originalType: 'rotina' 
-        }]);
+        isNewInstance = true;
     } else {
-        setTasks((current) => current.map((item) => (item.id === task.id ? { ...item, completed: true } : item)));
+        updatedTask = { ...task, completed: true };
+    }
+
+    if (updatedTask) {
+        let error;
+        if (isNewInstance) {
+            const { data, error: err } = await supabase.from('tasks').insert([updatedTask]).select();
+            error = err;
+            if (data) updatedTask = data[0];
+        } else {
+            const { error: err } = await supabase.from('tasks').update({ completed: true }).eq('id', task.id);
+            error = err;
+        }
+
+        if (!error) {
+            setTasks(current => {
+              if (isNewInstance) {
+                  const occurrenceKey = updatedTask.occurrenceKey;
+                  const existingIndex = current.findIndex(item => getStoredOccurrenceKey(item) === occurrenceKey);
+                  if (existingIndex >= 0) {
+                    return current.map((item, index) => (index === existingIndex ? { ...item, completed: true } : item));
+                  }
+                  return [...current, updatedTask].sort((a, b) => a.time.localeCompare(b.time));
+              } else {
+                  return current.map((item) => (item.id === task.id ? { ...item, completed: true } : item));
+              }
+            });
+        } else {
+            console.error('Erro ao atualizar tarefa:', error);
+        }
     }
   };
 
@@ -920,14 +954,43 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
     setHabitName('');
   };
 
-  const addTask = (event) => {
+  const addTask = async (event) => {
     event.preventDefault();
     if (!taskTitle.trim()) return;
-    setTasks((current) => [
-      ...current,
-      { id: Date.now(), title: taskTitle, type: 'avulsa', time: taskTime, date: taskDate, duration: Number(taskDuration), completed: false, focusLabel: taskTitle }
-    ].sort((a, b) => a.time.localeCompare(b.time)));
-    setTaskTitle('');
+
+    const newTask = {
+      title: taskTitle,
+      type: 'avulsa',
+      time: taskTime,
+      date: taskDate,
+      duration: Number(taskDuration),
+      completed: false,
+      focusLabel: taskTitle,
+      user_id: supabase.auth.getUser().then(({ data }) => data.user?.id) // Pegamos o ID do usuário logado
+    };
+
+    // Buscamos o ID real do usuário atual
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const taskToSave = { ...newTask, user_id: user.id };
+    delete taskToSave.id; // Deixamos o Supabase gerar o ID serial/uuid se necessário
+
+    const { data: savedTask, error } = await supabase
+      .from('tasks')
+      .insert([taskToSave])
+      .select();
+
+    if (!error && savedTask) {
+      setTasks((current) => [
+        ...current,
+        savedTask[0]
+      ].sort((a, b) => a.time.localeCompare(b.time)));
+      setTaskTitle('');
+    } else {
+      console.error('Erro ao salvar tarefa:', error);
+      alert('Erro ao salvar no banco de dados');
+    }
   };
 
   const toggleDay = (day) => {
