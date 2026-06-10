@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { supabase } from './supabase';
 import {
   AlarmClock,
   BarChart3,
