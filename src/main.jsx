@@ -1601,15 +1601,17 @@ function UserManagement({ users, setUsers }) {
 
   const addUser = (e) => {
     e.preventDefault();
-    if (!newUsername || !newPassword) return;
-    if (users.find(u => u.username === newUsername)) {
+    const username = newUsername.trim();
+    const password = newPassword;
+    if (!username || !password) return;
+    if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
       alert('Usuário já existe');
       return;
     }
     const newUser = {
-      id: crypto.randomUUID(),
-      username: newUsername,
-      password: newPassword,
+      id: Date.now().toString() + Math.random().toString(36).substring(2, 9),
+      username,
+      password,
       role: newRole
     };
     setUsers([...users, newUser]);
@@ -1629,8 +1631,8 @@ function UserManagement({ users, setUsers }) {
     <section className="manager-grid">
       <form className="tool-panel" onSubmit={addUser}>
         <SectionTitle icon={Users} eyebrow="Administração" title="Criar Usuário" />
-        <label>Nome de usuário<input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} /></label>
-        <label>Senha<input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></label>
+        <label>Nome de usuário<input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} required /></label>
+        <label>Senha<input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /></label>
         <label>Cargo
           <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
             <option value="user">Usuário</option>
@@ -1668,7 +1670,8 @@ function Login({ onLogin, users }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const user = users.find(u => u.username === username && u.password === password);
+    const uInput = username.trim().toLowerCase();
+    const user = users.find(u => u.username.trim().toLowerCase() === uInput && u.password === password);
     if (user) {
       onLogin(user);
     } else {

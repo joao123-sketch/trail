@@ -1320,12 +1320,12 @@ textarea {
   }
 
   .week-grid-new {
-    min-width: 620px;
+    min-width: 820px;
   }
 
   .grid-header-row,
   .grid-hour-row {
-    grid-template-columns: 56px repeat(7, minmax(80px, 1fr));
+    grid-template-columns: 56px repeat(7, minmax(110px, 1fr));
   }
 
   .day-header-cell {
@@ -1342,11 +1342,14 @@ textarea {
 
   .calendar-item {
     padding: 7px;
+    height: auto;
+    min-height: min-content !important;
   }
 
   .item-actions {
     display: flex;
     flex-shrink: 0;
+    gap: 2px;
   }
 
   .month-grid {
@@ -1359,9 +1362,10 @@ textarea {
   }
 
   .count-pill {
-    font-size: 0.56rem;
-    line-height: 1.2;
+    font-size: 0.62rem;
+    line-height: 1.3;
     overflow-wrap: anywhere;
+    padding: 2px 4px;
   }
 
   .meal-grid-display {
