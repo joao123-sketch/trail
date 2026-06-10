@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   AlarmClock,
@@ -10,10 +10,12 @@ import {
   ChevronRight,
   CircleDashed,
   ClipboardList,
+  Dumbbell,
   Focus,
   ImagePlus,
   Link as LinkIcon,
   ListChecks,
+  LogOut,
   NotebookPen,
   Pause,
   Play,
@@ -21,6 +23,8 @@ import {
   RotateCcw,
   TimerReset,
   Underline,
+  Users,
+  Utensils,
   X
 } from 'lucide-react';
 import './styles.css';
@@ -29,12 +33,99 @@ const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'tasks', label: 'Tarefas', icon: ClipboardList },
   { id: 'focus', label: 'Foco', icon: Focus },
-  { id: 'calendar', label: 'Calendario', icon: CalendarDays },
-  { id: 'journal', label: 'Diario', icon: NotebookPen },
-  { id: 'studies', label: 'Estudos', icon: BookOpen }
+  { id: 'journal', label: 'Diário', icon: NotebookPen },
+  { id: 'studies', label: 'Estudos', icon: BookOpen },
+  { id: 'menu', label: 'Cardápio', icon: Utensils },
+  { id: 'workout', label: 'Treino', icon: Dumbbell }
 ];
 
 const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
+
+const getDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getDayName = (date = new Date()) => {
+  const jsDayIndex = date.getDay();
+  return weekDays[jsDayIndex === 0 ? 6 : jsDayIndex - 1];
+};
+
+const getOccurrenceKey = (sourceType, sourceId, dateKey) => `${sourceType}:${sourceId}:${dateKey}`;
+
+const getStoredOccurrenceKey = (task) => {
+  if (task.occurrenceKey) return task.occurrenceKey;
+  if (!task.originalId) return null;
+  const sourceType = task.sourceType || (task.isMeal ? 'meal' : task.isWorkout ? 'workout' : 'habit');
+  return getOccurrenceKey(sourceType, task.originalId, task.date || getDateKey());
+};
+
+const getGeneratedTasksForDate = ({ date = new Date(), tasks, habits = [], meals = [], workouts = [] }) => {
+  const dateKey = getDateKey(date);
+  const dayName = getDayName(date);
+
+  const storedTasksForDate = tasks.filter(task => {
+    if (task.type === 'rotina') return !task.date || task.date === dateKey;
+    return task.date === dateKey;
+  });
+
+  const storedOccurrenceKeys = new Set(storedTasksForDate.map(getStoredOccurrenceKey).filter(Boolean));
+
+  const filteredHabits = habits
+    .filter(h => h.days.includes(dayName) && !storedOccurrenceKeys.has(getOccurrenceKey('habit', h.id, dateKey)))
+    .map(h => ({
+      id: getOccurrenceKey('habit', h.id, dateKey),
+      originalId: h.id,
+      sourceType: 'habit',
+      sourceId: h.id,
+      occurrenceKey: getOccurrenceKey('habit', h.id, dateKey),
+      date: dateKey,
+      title: h.name,
+      type: 'rotina',
+      time: h.time,
+      duration: h.duration || 60,
+      completed: false,
+      isHabit: true
+    }));
+
+  const filteredMeals = meals
+    .filter(m => m.day === dayName && !storedOccurrenceKeys.has(getOccurrenceKey('meal', m.id, dateKey)))
+    .map(m => ({
+      id: getOccurrenceKey('meal', m.id, dateKey),
+      originalId: m.id,
+      sourceType: 'meal',
+      sourceId: m.id,
+      occurrenceKey: getOccurrenceKey('meal', m.id, dateKey),
+      date: dateKey,
+      title: `Nutrição: ${m.type} - ${m.description}`,
+      type: 'rotina',
+      time: m.time,
+      duration: 30,
+      completed: false,
+      isMeal: true
+    }));
+
+  const filteredWorkouts = workouts
+    .filter(w => w.days.includes(dayName) && !storedOccurrenceKeys.has(getOccurrenceKey('workout', w.id, dateKey)))
+    .map(w => ({
+      id: getOccurrenceKey('workout', w.id, dateKey),
+      originalId: w.id,
+      sourceType: 'workout',
+      sourceId: w.id,
+      occurrenceKey: getOccurrenceKey('workout', w.id, dateKey),
+      date: dateKey,
+      title: `Treino: ${w.title}`,
+      type: 'rotina',
+      time: w.time,
+      duration: 60,
+      completed: false,
+      isWorkout: true
+    }));
+
+  return [...storedTasksForDate, ...filteredHabits, ...filteredMeals, ...filteredWorkouts].sort((a, b) => a.time.localeCompare(b.time));
+};
 
 const initialTasks = [
   {
@@ -108,54 +199,189 @@ const initialStudies = [
 ];
 
 function App() {
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('trail_current_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [users, setUsers] = useState(() => {
+    const saved = localStorage.getItem('trail_users');
+    return saved ? JSON.parse(saved) : [{ id: 'admin', username: 'admin', password: '123', role: 'admin' }];
+  });
+
   const [activeView, setActiveView] = useState('dashboard');
-  const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem('trail_tasks');
-    return (saved ? JSON.parse(saved) : initialTasks).sort((a, b) => a.time.localeCompare(b.time));
-  });
-  const [habits, setHabits] = useState(() => {
-    const saved = localStorage.getItem('trail_habits');
-    return saved ? JSON.parse(saved) : initialHabits;
-  });
-  const [studies, setStudies] = useState(() => {
-    const saved = localStorage.getItem('trail_studies');
-    return saved ? JSON.parse(saved) : initialStudies;
-  });
+  const [tasks, setTasks] = useState([]);
+  const [habits, setHabits] = useState([]);
+  const [studies, setStudies] = useState([]);
+  const [journalEntries, setJournalEntries] = useState([]);
+  const [meals, setMeals] = useState([]);
+  const [workouts, setWorkouts] = useState([]);
+
+  useEffect(() => {
+    localStorage.setItem('trail_users', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('trail_current_user', JSON.stringify(currentUser));
+      const uId = currentUser.id;
+      
+      const savedTasks = localStorage.getItem(`trail_${uId}_tasks`);
+      setTasks((savedTasks ? JSON.parse(savedTasks) : initialTasks).sort((a, b) => a.time.localeCompare(b.time)));
+      
+      const savedHabits = localStorage.getItem(`trail_${uId}_habits`);
+      setHabits(savedHabits ? JSON.parse(savedHabits) : initialHabits);
+      
+      const savedStudies = localStorage.getItem(`trail_${uId}_studies`);
+      setStudies(savedStudies ? JSON.parse(savedStudies) : initialStudies);
+
+      const savedJournal = localStorage.getItem(`trail_${uId}_journal`);
+      setJournalEntries(savedJournal ? JSON.parse(savedJournal) : []);
+
+      const savedMeals = localStorage.getItem(`trail_${uId}_meals`);
+      setMeals(savedMeals ? JSON.parse(savedMeals) : []);
+
+      const savedWorkouts = localStorage.getItem(`trail_${uId}_workouts`);
+      setWorkouts(savedWorkouts ? JSON.parse(savedWorkouts) : []);
+    } else {
+      localStorage.removeItem('trail_current_user');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(`trail_${currentUser.id}_tasks`, JSON.stringify(tasks));
+  }, [tasks, currentUser]);
+
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(`trail_${currentUser.id}_habits`, JSON.stringify(habits));
+  }, [habits, currentUser]);
+
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(`trail_${currentUser.id}_studies`, JSON.stringify(studies));
+  }, [studies, currentUser]);
+
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(`trail_${currentUser.id}_journal`, JSON.stringify(journalEntries));
+  }, [journalEntries, currentUser]);
+
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(`trail_${currentUser.id}_meals`, JSON.stringify(meals));
+  }, [meals, currentUser]);
+
+  useEffect(() => {
+    if (currentUser) localStorage.setItem(`trail_${currentUser.id}_workouts`, JSON.stringify(workouts));
+  }, [workouts, currentUser]);
+
   const [frictionTask, setFrictionTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [focusSession, setFocusSession] = useState(null);
 
-  useEffect(() => {
-    localStorage.setItem('trail_tasks', JSON.stringify(tasks));
-  }, [tasks]);
+  const todaysTasks = useMemo(() => {
+    return getGeneratedTasksForDate({ tasks, habits, meals, workouts });
 
-  useEffect(() => {
-    localStorage.setItem('trail_habits', JSON.stringify(habits));
-  }, [habits]);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const jsDayIndex = new Date().getDay();
+    const dayName = weekDays[jsDayIndex === 0 ? 6 : jsDayIndex - 1];
 
-  useEffect(() => {
-    localStorage.setItem('trail_studies', JSON.stringify(studies));
-  }, [studies]);
+    const storedTasksForToday = tasks.filter(task => {
+      if (task.type === 'rotina') return !task.date || task.date === todayStr;
+      return task.date === todayStr;
+    });
+
+    // Use a Set to track IDs of generated items that have already been converted to real tasks for today
+    const storedIds = new Set(storedTasksForToday.map(t => t.originalId || t.id));
+
+    const filteredHabits = habits.filter(h => h.days.includes(dayName) && !storedIds.has(h.id)).map(h => ({
+      id: h.id,
+      title: h.name,
+      type: 'rotina',
+      time: h.time,
+      duration: h.duration || 60,
+      completed: false,
+      isHabit: true
+    }));
+
+    const filteredMeals = meals.filter(m => m.day === dayName && !storedIds.has(m.id)).map(m => ({
+      id: m.id,
+      title: `Nutrição: ${m.type} - ${m.description}`,
+      type: 'rotina',
+      time: m.time,
+      duration: 30,
+      completed: false,
+      isMeal: true
+    }));
+
+    const filteredWorkouts = workouts.filter(w => w.days.includes(dayName) && !storedIds.has(w.id)).map(w => ({
+      id: w.id,
+      title: `Treino: ${w.title}`,
+      type: 'rotina',
+      time: w.time,
+      duration: 60,
+      completed: false,
+      isWorkout: true
+    }));
+
+    return [...storedTasksForToday, ...filteredHabits, ...filteredMeals, ...filteredWorkouts].sort((a, b) => a.time.localeCompare(b.time));
+  }, [tasks, habits, meals, workouts]);
 
   const metrics = useMemo(() => {
-    const completed = tasks.filter((task) => task.completed).length;
-    const routines = tasks.filter((task) => task.type === 'rotina').length;
+    if (todaysTasks.length === 0) return { total: 0, completed: 0, pending: 0, routines: 0, adHoc: 0, completionRate: 0 };
+    const completed = todaysTasks.filter((task) => task.completed).length;
+    const routines = todaysTasks.filter((task) => task.type === 'rotina').length;
     return {
-      total: tasks.length,
+      total: todaysTasks.length,
       completed,
-      pending: tasks.length - completed,
+      pending: todaysTasks.length - completed,
       routines,
-      adHoc: tasks.length - routines,
-      completionRate: Math.round((completed / tasks.length) * 100)
+      adHoc: todaysTasks.length - routines,
+      completionRate: Math.round((completed / todaysTasks.length) * 100)
     };
-  }, [tasks]);
+  }, [todaysTasks]);
 
   const toggleTask = (task) => {
     if (task.completed) {
       setFrictionTask(task);
       return;
     }
-    setTasks((current) => current.map((item) => (item.id === task.id ? { ...item, completed: true } : item)));
+    
+    if (task.isHabit || task.isMeal || task.isWorkout) {
+        const date = task.date || getDateKey();
+        const sourceType = task.sourceType || (task.isMeal ? 'meal' : task.isWorkout ? 'workout' : 'habit');
+        const sourceId = task.sourceId || task.originalId || task.id;
+        const occurrenceKey = task.occurrenceKey || getOccurrenceKey(sourceType, sourceId, date);
+        const completedTask = {
+          ...task,
+          id: crypto.randomUUID(),
+          originalId: sourceId,
+          sourceId,
+          sourceType,
+          occurrenceKey,
+          date,
+          completed: true,
+          type: 'rotina'
+        };
+
+        setTasks(current => {
+          const existingIndex = current.findIndex(item => getStoredOccurrenceKey(item) === occurrenceKey);
+          if (existingIndex >= 0) {
+            return current.map((item, index) => (index === existingIndex ? { ...item, completed: true } : item));
+          }
+          return [...current, completedTask].sort((a, b) => a.time.localeCompare(b.time));
+        });
+        return;
+
+        // Create a unique ID for the completed instance but keep reference to original
+        setTasks(current => [...current, { 
+          ...task, 
+          id: crypto.randomUUID(), 
+          originalId: task.id, 
+          date: new Date().toISOString().split('T')[0], 
+          completed: true, 
+          type: 'avulsa', 
+          originalType: 'rotina' 
+        }]);
+    } else {
+        setTasks((current) => current.map((item) => (item.id === task.id ? { ...item, completed: true } : item)));
+    }
   };
 
   const updateTask = (updatedTask, applyToAll) => {
@@ -209,32 +435,46 @@ function App() {
     setFrictionTask(null);
   };
 
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setActiveView('dashboard');
+  };
+
+  if (!currentUser) {
+    return <Login onLogin={setCurrentUser} users={users} />;
+  }
+
   if (focusSession) {
     return <AbsoluteFocus session={focusSession} onExit={() => setFocusSession(null)} />;
   }
 
   return (
     <div className="app-shell">
-      <Sidebar activeView={activeView} onNavigate={setActiveView} />
+      <Sidebar activeView={activeView} onNavigate={setActiveView} user={currentUser} onLogout={handleLogout} />
       <main className="workspace">
         <Header activeView={activeView} metrics={metrics} />
-        {activeView === 'dashboard' && <Dashboard tasks={tasks} metrics={metrics} onToggleTask={toggleTask} />}
+        {activeView === 'dashboard' && <Dashboard tasks={todaysTasks} metrics={metrics} onToggleTask={toggleTask} />}
         {activeView === 'tasks' && (
           <TaskManager
             habits={habits}
             tasks={tasks}
             setHabits={setHabits}
             setTasks={setTasks}
+            meals={meals}
+            workouts={workouts}
             onForceFriction={(task) => setFrictionTask(task)}
             onEditTask={setEditingTask}
           />
         )}
         {activeView === 'focus' && <FocusModule tasks={tasks} onStart={setFocusSession} />}
         {activeView === 'calendar' && (
-          <ExecutionCalendar tasks={tasks} setTasks={setTasks} habits={habits} onEditTask={setEditingTask} />
+          <ExecutionCalendar tasks={tasks} setTasks={setTasks} habits={habits} meals={meals} workouts={workouts} onEditTask={setEditingTask} />
         )}
-        {activeView === 'journal' && <Journal />}
+        {activeView === 'journal' && <Journal entries={journalEntries} setEntries={setJournalEntries} />}
         {activeView === 'studies' && <StudyBase studies={studies} setStudies={setStudies} setTasks={setTasks} />}
+        {activeView === 'menu' && <MealPlanner meals={meals} setMeals={setMeals} />}
+        {activeView === 'workout' && <WorkoutTracker workouts={workouts} setWorkouts={setWorkouts} />}
+        {activeView === 'admin' && currentUser.role === 'admin' && <UserManagement users={users} setUsers={setUsers} />}
       </main>
       {frictionTask && <FrictionModal task={frictionTask} onClose={() => setFrictionTask(null)} onSubmit={registerFriction} />}
       {editingTask && (
@@ -249,7 +489,254 @@ function App() {
   );
 }
 
-function Sidebar({ activeView, onNavigate }) {
+function MealPlanner({ meals, setMeals }) {
+  const [selectedDays, setSelectedDays] = useState(['Seg']);
+  const [mealType, setMealType] = useState('Café da Manhã');
+  const [time, setTime] = useState('08:00');
+  const [description, setDescription] = useState('');
+
+  const toggleDay = (day) => {
+    setSelectedDays((current) => (current.includes(day) ? current.filter((item) => item !== day) : [...current, day]));
+  };
+
+  const addMeal = (e) => {
+    e.preventDefault();
+    if (!description.trim() || selectedDays.length === 0) return;
+    
+    const newMeals = selectedDays.map(day => ({
+      id: crypto.randomUUID(),
+      day,
+      type: mealType,
+      time,
+      description
+    }));
+    
+    setMeals([...meals, ...newMeals]);
+    setDescription('');
+  };
+
+  const deleteMeal = (id) => {
+    setMeals(meals.filter(m => m.id !== id));
+  };
+
+  return (
+    <section className="manager-grid">
+      <form className="tool-panel" onSubmit={addMeal}>
+        <SectionTitle icon={Utensils} eyebrow="Nutrição" title="Planejar Refeição" />
+        <div className="number-grid" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
+          <label>Refeição
+            <select value={mealType} onChange={(e) => setMealType(e.target.value)}>
+              <option>Café da Manhã</option>
+              <option>Lanche da Manhã</option>
+              <option>Almoço</option>
+              <option>Lanche da Tarde</option>
+              <option>Jantar</option>
+              <option>Ceia</option>
+            </select>
+          </label>
+          <label>Horário<input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>
+        </div>
+        
+        <label>Dias da Semana</label>
+        <div className="day-picker" style={{ marginBottom: '12px' }}>
+          {weekDays.map((day) => (
+            <button 
+              type="button" 
+              className={selectedDays.includes(day) ? 'selected' : ''} 
+              onClick={() => toggleDay(day)} 
+              key={day}
+            >
+              {day}
+            </button>
+          ))}
+        </div>
+
+        <label>O que vou comer?<textarea value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+        <button className="primary-action" type="submit"><Plus size={18} /> Adicionar ao Cardápio</button>
+      </form>
+
+      <div className="tool-panel wide">
+        <div className="meal-grid-display">
+          {weekDays.map(d => (
+            <div key={d} className="meal-day-column">
+              <h3>{d}</h3>
+              <div className="meal-list">
+                {meals.filter(m => m.day === d)
+                  .sort((a, b) => a.time.localeCompare(b.time))
+                  .map(m => (
+                    <div key={m.id} className="meal-card">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <strong>{m.type}</strong>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--crimson)', fontWeight: 700 }}>{m.time}</span>
+                        </div>
+                        <button className="ghost-icon" onClick={() => deleteMeal(m.id)} style={{ width: '24px', height: '24px' }}><X size={12} /></button>
+                      </div>
+                      <p style={{ marginTop: '6px' }}>{m.description}</p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function WorkoutTracker({ workouts, setWorkouts }) {
+  const [title, setTitle] = useState('');
+  const [time, setTime] = useState('07:00');
+  const [selectedDays, setSelectedDays] = useState(['Seg']);
+  const [exerciseList, setExerciseList] = useState([{ id: crypto.randomUUID(), name: '', sets: '', reps: '' }]);
+
+  const toggleDay = (day) => {
+    setSelectedDays((current) => (current.includes(day) ? current.filter((item) => item !== day) : [...current, day]));
+  };
+
+  const addExerciseRow = () => {
+    setExerciseList([...exerciseList, { id: crypto.randomUUID(), name: '', sets: '', reps: '' }]);
+  };
+
+  const removeExerciseRow = (id) => {
+    if (exerciseList.length > 1) {
+      setExerciseList(exerciseList.filter(ex => ex.id !== id));
+    }
+  };
+
+  const updateExerciseRow = (id, field, value) => {
+    setExerciseList(exerciseList.map(ex => ex.id === id ? { ...ex, [field]: value } : ex));
+  };
+
+  const addWorkout = (e) => {
+    e.preventDefault();
+    if (!title.trim() || selectedDays.length === 0) return;
+
+    const validExercises = exerciseList.filter(ex => ex.name.trim());
+
+    const newWorkout = { 
+      id: crypto.randomUUID(), 
+      title, 
+      time, 
+      days: selectedDays.join(', '), 
+      exercises: validExercises 
+    };
+    setWorkouts([...workouts, newWorkout]);
+    setTitle('');
+    setExerciseList([{ id: crypto.randomUUID(), name: '', sets: '', reps: '' }]);
+  };
+
+  const deleteWorkout = (id) => {
+    setWorkouts(workouts.filter(w => w.id !== id));
+  };
+
+  return (
+    <section className="manager-grid">
+      <form className="tool-panel" onSubmit={addWorkout}>
+        <SectionTitle icon={Dumbbell} eyebrow="Performance" title="Definir Treino" />
+        <label>Título do Treino
+          <input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </label>
+        <div className="number-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <label>Horário<input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>
+          <div />
+        </div>
+
+        <label>Dias da Semana</label>
+        <div className="day-picker" style={{ marginBottom: '12px' }}>
+          {weekDays.map((day) => (
+            <button 
+              type="button" 
+              className={selectedDays.includes(day) ? 'selected' : ''} 
+              onClick={() => toggleDay(day)} 
+              key={day}
+            >
+              {day}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gap: '12px' }}>
+          <label>Exercícios, Séries e Repetições</label>
+          {exerciseList.map((ex, index) => (
+            <div key={ex.id} style={{ display: 'grid', gridTemplateColumns: '2.5fr 1fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+              <input 
+                placeholder="Exercício" 
+                value={ex.name} 
+                onChange={(e) => updateExerciseRow(ex.id, 'name', e.target.value)} 
+              />
+              <input 
+                placeholder="Séries" 
+                value={ex.sets} 
+                onChange={(e) => updateExerciseRow(ex.id, 'sets', e.target.value)} 
+              />
+              <input 
+                placeholder="Reps" 
+                value={ex.reps} 
+                onChange={(e) => updateExerciseRow(ex.id, 'reps', e.target.value)} 
+              />
+              {exerciseList.length > 1 && (
+                <button 
+                  type="button" 
+                  className="ghost-icon" 
+                  onClick={() => removeExerciseRow(ex.id)}
+                  style={{ color: 'var(--crimson)', height: '44px', width: '44px' }}
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+          ))}
+          <button 
+            type="button" 
+            className="nav-item" 
+            onClick={addExerciseRow}
+            style={{ justifyContent: 'center', borderStyle: 'dashed', borderColor: 'var(--line)' }}
+          >
+            <Plus size={18} /> Adicionar Exercício
+          </button>
+        </div>
+
+        <button className="primary-action" type="submit" style={{ marginTop: '12px' }}>
+          <Plus size={18} /> Cadastrar Treino
+        </button>
+      </form>
+
+      <div className="tool-panel wide">
+        <div className="meal-grid-display">
+          {weekDays.map(d => (
+            <div key={d} className="meal-day-column">
+              <h3>{d}</h3>
+              <div className="meal-list">
+                {workouts.filter(w => w.days.includes(d)).map(w => (
+                  <div key={w.id} className="meal-card workout-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <strong style={{ textTransform: 'none', fontSize: '0.9rem' }}>{w.title}</strong>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--apex)', fontWeight: 700 }}>{w.time}</span>
+                      </div>
+                      <button className="ghost-icon" onClick={() => deleteWorkout(w.id)} style={{ width: '24px', height: '24px' }}><X size={12} /></button>
+                    </div>
+                    <div style={{ marginTop: '8px', borderTop: '1px solid var(--line)', paddingTop: '8px' }}>
+                      {Array.isArray(w.exercises) ? w.exercises.map(ex => (
+                        <div key={ex.id} style={{ fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>{ex.name}</span>
+                          <span style={{ color: 'var(--muted)', fontWeight: 600 }}>{ex.sets}x{ex.reps}</span>
+                        </div>
+                      )) : <p style={{ fontSize: '0.8rem', whiteSpace: 'pre-line' }}>{w.exercises}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Sidebar({ activeView, onNavigate, user, onLogout }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -268,10 +755,22 @@ function Sidebar({ activeView, onNavigate }) {
             </button>
           );
         })}
+        {user.role === 'admin' && (
+          <button className={activeView === 'admin' ? 'nav-item active' : 'nav-item'} onClick={() => onNavigate('admin')}>
+            <Users size={18} />
+            <span>Usuários</span>
+          </button>
+        )}
       </nav>
-      <div className="sidebar-status">
-        <CircleDashed size={18} />
-        <span>Disciplina em execucao</span>
+      <div className="sidebar-footer" style={{ marginTop: 'auto', display: 'grid', gap: '8px' }}>
+        <div className="sidebar-status">
+          <CircleDashed size={18} />
+          <span>{user.username}</span>
+        </div>
+        <button className="nav-item" onClick={onLogout} style={{ color: 'var(--crimson)' }}>
+          <LogOut size={18} />
+          <span>Sair</span>
+        </button>
       </div>
     </aside>
   );
@@ -282,7 +781,7 @@ function Header({ activeView, metrics }) {
   return (
     <header className="topbar">
       <div>
-        <p className="eyebrow">Sistema diario de execucao</p>
+        <p className="eyebrow">Sistema diário de execução</p>
         <h1>{title}</h1>
       </div>
     </header>
@@ -302,7 +801,7 @@ function Dashboard({ tasks, metrics, onToggleTask }) {
   return (
     <section className="dashboard-grid">
       <div className="daily-panel">
-        <SectionTitle icon={ListChecks} eyebrow="Hoje" title="Linha de execucao" />
+        <SectionTitle icon={ListChecks} eyebrow="Hoje" title="Linha de execução" />
         <div className="task-list">
           {tasks.map((task) => (
             <TaskRow key={task.id} task={task} onToggle={() => onToggleTask(task)} />
@@ -311,12 +810,12 @@ function Dashboard({ tasks, metrics, onToggleTask }) {
       </div>
       <div className="metrics-stack">
         <div className="pill-grid">
-          <MetricPill label="Concluidas" value={metrics.completed} tone="success" />
+          <MetricPill label="Concluídas" value={metrics.completed} tone="success" />
           <MetricPill label="Pendentes" value={metrics.pending} tone="danger" />
-          <MetricPill label="Aderencia" value={`${metrics.completionRate}%`} />
+          <MetricPill label="Aderência" value={`${metrics.completionRate}%`} />
         </div>
         <ProgressRing value={metrics.completionRate} />
-        <BarMetric title="Concluidas vs pendentes" leftLabel="Feito" left={metrics.completed} rightLabel="Aberto" right={metrics.pending} />
+        <BarMetric title="Concluídas vs pendentes" leftLabel="Feito" left={metrics.completed} rightLabel="Aberto" right={metrics.pending} />
         <BarMetric title="Rotina vs avulsa" leftLabel="Rotina" left={metrics.routines} rightLabel="Avulsa" right={metrics.adHoc} />
       </div>
     </section>
@@ -390,18 +889,20 @@ function BarMetric({ title, leftLabel, left, rightLabel, right }) {
   );
 }
 
-function TaskManager({ habits, tasks, setHabits, setTasks, onForceFriction, onEditTask }) {
+function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts = [], onForceFriction, onEditTask }) {
   const [habitName, setHabitName] = useState('');
   const [habitTime, setHabitTime] = useState('06:00');
+  const [habitDuration, setHabitDuration] = useState(30);
   const [selectedDays, setSelectedDays] = useState(['Seg', 'Qua', 'Sex']);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskTime, setTaskTime] = useState('16:00');
+  const [taskDuration, setTaskDuration] = useState(30);
   const [taskDate, setTaskDate] = useState(new Date().toISOString().split('T')[0]);
 
   const addHabit = (event) => {
     event.preventDefault();
     if (!habitName.trim()) return;
-    setHabits((current) => [...current, { id: crypto.randomUUID(), name: habitName, days: selectedDays, time: habitTime }]);
+    setHabits((current) => [...current, { id: crypto.randomUUID(), name: habitName, days: selectedDays, time: habitTime, duration: Number(habitDuration) }]);
     setHabitName('');
   };
 
@@ -410,7 +911,7 @@ function TaskManager({ habits, tasks, setHabits, setTasks, onForceFriction, onEd
     if (!taskTitle.trim()) return;
     setTasks((current) => [
       ...current,
-      { id: Date.now(), title: taskTitle, type: 'avulsa', time: taskTime, date: taskDate, duration: 45, completed: false, focusLabel: taskTitle }
+      { id: Date.now(), title: taskTitle, type: 'avulsa', time: taskTime, date: taskDate, duration: Number(taskDuration), completed: false, focusLabel: taskTitle }
     ].sort((a, b) => a.time.localeCompare(b.time)));
     setTaskTitle('');
   };
@@ -419,28 +920,42 @@ function TaskManager({ habits, tasks, setHabits, setTasks, onForceFriction, onEd
     setSelectedDays((current) => (current.includes(day) ? current.filter((item) => item !== day) : [...current, day]));
   };
 
+  const durationOptions = [15, 30, 45, 60];
+
   return (
     <section className="manager-grid">
       <form className="tool-panel" onSubmit={addHabit}>
-        <SectionTitle icon={RotateCcw} eyebrow="Rotinas" title="Habitos diarios" />
+        <SectionTitle icon={RotateCcw} eyebrow="Rotinas" title="Habitos diários" />
         <label>Atividade recorrente<input value={habitName} onChange={(event) => setHabitName(event.target.value)} /></label>
-        <label>Horario<input type="time" value={habitTime} onChange={(event) => setHabitTime(event.target.value)} /></label>
+        <div className="number-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <label>Horário<input type="time" value={habitTime} onChange={(event) => setHabitTime(event.target.value)} /></label>
+          <label>Duração
+            <select value={habitDuration} onChange={(e) => setHabitDuration(e.target.value)}>
+              {durationOptions.map(d => <option key={d} value={d}>{d} min</option>)}
+            </select>
+          </label>
+        </div>
         <div className="day-picker">
           {weekDays.map((day) => <button type="button" className={selectedDays.includes(day) ? 'selected' : ''} onClick={() => toggleDay(day)} key={day}>{day}</button>)}
         </div>
         <button className="primary-action" type="submit"><Plus size={18} /> Cadastrar rotina</button>
       </form>
       <form className="tool-panel" onSubmit={addTask}>
-        <SectionTitle icon={Plus} eyebrow="Avulsas" title="Demandas unicas" />
+        <SectionTitle icon={Plus} eyebrow="Avulsas" title="Demandas únicas" />
         <label>Tarefa<input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} /></label>
         <div className="number-grid">
-          <label>Horario<input type="time" value={taskTime} onChange={(event) => setTaskTime(event.target.value)} /></label>
+          <label>Horário<input type="time" value={taskTime} onChange={(event) => setTaskTime(event.target.value)} /></label>
+          <label>Duração
+            <select value={taskDuration} onChange={(e) => setTaskDuration(e.target.value)}>
+              {durationOptions.map(d => <option key={d} value={d}>{d} min</option>)}
+            </select>
+          </label>
           <label>Data<input type="date" value={taskDate} onChange={(event) => setTaskDate(event.target.value)} /></label>
         </div>
         <button className="primary-action" type="submit"><Plus size={18} /> Forjar tarefa</button>
       </form>
       <div className="tool-panel wide">
-        <ExecutionCalendar tasks={tasks} setTasks={setTasks} habits={habits} onEditTask={onEditTask} />
+        <ExecutionCalendar tasks={tasks} setTasks={setTasks} habits={habits} meals={meals} workouts={workouts} onEditTask={onEditTask} />
       </div>
     </section>
   );
@@ -534,8 +1049,6 @@ function FocusModule({ tasks, onStart }) {
   const [study, setStudy] = useState(50);
   const [breakTime, setBreakTime] = useState(10);
   const [cycles, setCycles] = useState(3);
-  const [taskId, setTaskId] = useState(tasks[0]?.id ?? '');
-  const task = tasks.find((item) => item.id === Number(taskId)) ?? tasks[0];
 
   const adjust = (setter, val, delta, min = 1) => setter(Math.max(val + delta, min));
 
@@ -543,7 +1056,6 @@ function FocusModule({ tasks, onStart }) {
     <section className="focus-layout">
       <div className="tool-panel focus-config">
         <SectionTitle icon={TimerReset} eyebrow="Pomodoro" title="Foco absoluto" />
-        <label>Tarefa em foco<select value={taskId} onChange={(event) => setTaskId(event.target.value)}>{tasks.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
         <div className="number-grid">
           <div className="counter-field">
             <label>Foco</label>
@@ -570,7 +1082,7 @@ function FocusModule({ tasks, onStart }) {
             </div>
           </div>
         </div>
-        <button className="primary-action xl" onClick={() => onStart({ task, study, breakTime, cycles })}><Play size={20} /> Iniciar</button>
+        <button className="primary-action xl" onClick={() => onStart({ study, breakTime, cycles })}><Play size={20} /> Iniciar Sessão</button>
       </div>
     </section>
   );
@@ -591,21 +1103,21 @@ function AbsoluteFocus({ session, onExit }) {
     <main className="absolute-focus">
       <p className="eyebrow">Modo foco absoluto</p>
       <div className="focus-clock">{minutes}:{secs}</div>
-      <h1>{session.task.focusLabel}</h1>
+      <h1>EXECUÇÃO EM ANDAMENTO</h1>
       <button onClick={onExit}><Pause size={16} /> Interromper</button>
     </main>
   );
 }
 
-function ExecutionCalendar({ tasks, setTasks, habits = [], onEditTask }) {
+function ExecutionCalendar({ tasks, setTasks, habits = [], meals = [], workouts = [], onEditTask }) {
   const [viewDate, setViewDate] = useState(new Date());
   const [mode, setMode] = useState('week');
-  const hours = Array.from({ length: 17 }, (_, index) => index + 6);
+  const hours = Array.from({ length: 19 }, (_, index) => (index + 6) % 24);
 
   const startOfWeek = useMemo(() => {
     const d = new Date(viewDate);
     const day = d.getDay();
-    const diff = d.getDate() - (day === 0 ? 6 : day - 1); // Monday start
+    const diff = d.getDate() - (day === 0 ? 6 : day - 1);
     d.setDate(diff);
     d.setHours(0, 0, 0, 0);
     return d;
@@ -641,38 +1153,90 @@ function ExecutionCalendar({ tasks, setTasks, habits = [], onEditTask }) {
     setTasks(prev => prev.filter(t => t.id !== id));
   };
 
-  const getTasksForDate = (date) => {
+  const getAllTasksForDate = useCallback((date) => {
+    return getGeneratedTasksForDate({ date, tasks, habits, meals, workouts });
+
     const dateStr = date.toISOString().split('T')[0];
     const dayName = weekDays[date.getDay() === 0 ? 6 : date.getDay() - 1];
 
-    const filteredTasks = tasks.filter(task => {
-      if (task.type === 'rotina') {
-        return !task.date || task.date === dateStr;
-      }
+    const storedTasksForDate = tasks.filter(task => {
+      if (task.type === 'rotina') return !task.date || task.date === dateStr;
       return task.date === dateStr;
     });
 
-    const filteredHabits = habits.filter(h => h.days.includes(dayName)).map(h => ({
+    const storedIds = new Set(storedTasksForDate.map(t => t.originalId || t.id));
+
+    const filteredHabits = habits.filter(h => h.days.includes(dayName) && !storedIds.has(h.id)).map(h => ({
       id: h.id,
       title: h.name,
       type: 'rotina',
       time: h.time,
-      duration: 60,
+      duration: h.duration || 60,
       completed: false,
       isHabit: true
     }));
 
-    return [...filteredTasks, ...filteredHabits];
+    const filteredMeals = meals.filter(m => m.day === dayName && !storedIds.has(m.id)).map(m => ({
+      id: m.id,
+      title: `Nutrição: ${m.type} - ${m.description}`,
+      type: 'rotina',
+      time: m.time,
+      duration: 30,
+      completed: false,
+      isMeal: true
+    }));
+
+    const filteredWorkouts = workouts.filter(w => w.days.includes(dayName) && !storedIds.has(w.id)).map(w => ({
+      id: w.id,
+      title: `Treino: ${w.title}`,
+      type: 'rotina',
+      time: w.time,
+      duration: 60,
+      completed: false,
+      isWorkout: true
+    }));
+
+    return [...storedTasksForDate, ...filteredHabits, ...filteredMeals, ...filteredWorkouts].sort((a, b) => a.time.localeCompare(b.time));
+  }, [tasks, habits, meals, workouts]);
+
+  const getTasksByHourForDate = (date) => {
+    const allDayTasks = getAllTasksForDate(date);
+    
+    // Group by hour
+    const hourMap = {};
+    hours.forEach(h => hourMap[h] = []);
+    
+    allDayTasks.forEach(task => {
+      const h = parseInt(task.time.split(':')[0]);
+      if (hourMap[h]) hourMap[h].push(task);
+    });
+
+    return hourMap;
   };
 
   const monthName = viewDate.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
   const year = viewDate.getFullYear();
 
+  // Calculate row heights based on maximum tasks across all days in that hour
+  const rowHeights = useMemo(() => {
+    const heights = {};
+    hours.forEach(hour => {
+      let maxTasks = 1;
+      weekDaysDates.forEach(date => {
+        const dayTasks = getAllTasksForDate(date);
+        const count = dayTasks.filter(t => parseInt(t.time.split(':')[0]) === hour).length;
+        if (count > maxTasks) maxTasks = count;
+      });
+      heights[hour] = maxTasks;
+    });
+    return heights;
+  }, [hours, weekDaysDates, getAllTasksForDate]);
+
   return (
     <section className="calendar-panel">
       <div className="panel-head">
         <div className="calendar-nav">
-          <SectionTitle icon={CalendarDays} eyebrow="Execucao" title="Calendario tatico" />
+          <SectionTitle icon={CalendarDays} eyebrow="Execução" title="Calendário táctico" />
           <button className="ghost-icon" onClick={handlePrev}><ChevronLeft size={18} /></button>
           <span>{mode === 'week' ? `Semana de ${startOfWeek.getDate()}/${startOfWeek.getMonth() + 1}` : `${monthName} ${year}`}</span>
           <button className="ghost-icon" onClick={handleNext}><ChevronRight size={18} /></button>
@@ -684,35 +1248,56 @@ function ExecutionCalendar({ tasks, setTasks, habits = [], onEditTask }) {
       </div>
 
       {mode === 'week' ? (
-        <div className="week-grid">
-          <div className="time-col">
-            <div className="day-header" style={{ height: 32 }} />
-            {hours.map((hour) => <span key={hour}>{String(hour).padStart(2, '0')}:00</span>)}
-          </div>
-          {weekDaysDates.map((date, index) => {
-            const dayTasks = getTasksForDate(date);
-            return (
-              <div className="day-col" key={index}>
-                <div className="day-header">
+        <div className="week-grid-container" style={{ overflowX: 'auto' }}>
+          <div className="week-grid-new">
+            {/* Header */}
+            <div className="grid-header-row">
+              <div className="time-label-cell" />
+              {weekDaysDates.map((date, i) => (
+                <div className="day-header-cell" key={i}>
                   <span>{date.getDate()}</span>
-                  <strong>{weekDays[index]}</strong>
+                  <strong>{weekDays[i]}</strong>
                 </div>
-                {hours.map((hour) => <span className="hour-slot" key={hour} />)}
-                {dayTasks.map((task) => (
-                  <CalendarBlock 
-                    key={`${task.id}-${index}`} 
-                    task={task} 
-                    onToggle={() => toggleTaskStatus(task.id)}
-                    onDelete={() => deleteTask(task.id)}
-                    onEdit={() => onEditTask(task)}
-                  />
-                ))}
+              ))}
+            </div>
+
+            {/* Hours */}
+            {hours.map(hour => (
+              <div className="grid-hour-row" key={hour} style={{ minHeight: `${rowHeights[hour] * 60}px` }}>
+                <div className="time-label-cell">
+                  <span>{String(hour).padStart(2, '0')}:00</span>
+                </div>
+                {weekDaysDates.map((date, i) => {
+                  const dayTasks = getTasksByHourForDate(date)[hour] || [];
+                  return (
+                    <div className="day-task-cell" key={i}>
+                      {dayTasks.map(task => (
+                        <div 
+                          key={task.id} 
+                          className={`calendar-item ${task.completed ? 'complete' : ''}`}
+                          style={{ minHeight: `${(task.duration / 60) * 56}px` }}
+                          onClick={() => onEditTask(task)}
+                        >
+                          <div className="item-content">
+                            <strong>{task.title}</strong>
+                            <span>{task.time} ({task.duration}m)</span>
+                          </div>
+                          <div className="item-actions">
+                            <button onClick={(e) => { e.stopPropagation(); toggleTaskStatus(task.id); }}><Check size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}><X size={14} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       ) : (
         <div className="month-grid">
+          {/* Keep existing month grid logic */}
           {(() => {
             const firstDayOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
             const lastDayOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
@@ -727,19 +1312,12 @@ function ExecutionCalendar({ tasks, setTasks, habits = [], onEditTask }) {
             return days.map((date, index) => {
               if (!date) return <div className="month-day empty" key={`empty-${index}`} />;
               
-              const dayTasks = getTasksForDate(date);
+              const dayTasks = getAllTasksForDate(date);
               const routineCount = dayTasks.filter(t => t.type === 'rotina').length;
               const avulsaCount = dayTasks.filter(t => t.type === 'avulsa').length;
 
               return (
-                <div 
-                  className="month-day" 
-                  key={index} 
-                  onClick={() => {
-                    setViewDate(date);
-                    setMode('week');
-                  }}
-                >
+                <div className="month-day" key={index} onClick={() => { setViewDate(date); setMode('week'); }}>
                   <span>{date.getDate()}</span>
                   <div className="day-counts">
                     {routineCount > 0 && <div className="count-pill routine">{routineCount} Rotinas</div>}
@@ -755,35 +1333,13 @@ function ExecutionCalendar({ tasks, setTasks, habits = [], onEditTask }) {
   );
 }
 
-function CalendarBlock({ task, onToggle, onDelete, onEdit }) {
-  const [hour, minute] = task.time.split(':').map(Number);
-  const top = ((hour - 6) * 48) + (minute / 60) * 48 + 40; // Adjusted for day header
-  const height = Math.max((task.duration / 60) * 48, 34);
-  
-  return (
-    <div className={`calendar-block ${task.completed ? 'complete' : ''}`} style={{ top, height }} onClick={onEdit}>
-      {task.title}
-      <div className="block-actions">
-        <button onClick={(e) => { e.stopPropagation(); onToggle(); }}><Check size={14} /></button>
-        <button onClick={(e) => { e.stopPropagation(); onDelete(); }}><X size={14} /></button>
-      </div>
-    </div>
-  );
-}
+function CalendarBlock() { return null; } // Deprecated
 
-function Journal() {
-  const [entries, setEntries] = useState(() => {
-    const saved = localStorage.getItem('trail_journal');
-    return saved ? JSON.parse(saved) : [];
-  });
+function Journal({ entries, setEntries }) {
   const [currentId, setCurrentId] = useState(null);
   const [title, setTitle] = useState('');
   const editorRef = useRef(null);
   const [image, setImage] = useState('');
-
-  useEffect(() => {
-    localStorage.setItem('trail_journal', JSON.stringify(entries));
-  }, [entries]);
 
   const command = (name) => {
     document.execCommand(name, false, null);
@@ -875,7 +1431,7 @@ function Journal() {
         <ul><li>Checar datasets limpos</li><li>Registrar falhas de energia sem negociar com a meta</li></ul>
       </div>
 
-      {image && <img className="journal-image" src={image} alt="Upload do diario" />}
+      {image && <img className="journal-image" src={image} alt="Upload do diário" />}
 
       <div className="journal-history">
         <SectionTitle icon={NotebookPen} eyebrow="Histórico" title="Registros Passados" />
@@ -894,29 +1450,74 @@ function Journal() {
 }
 
 function StudyBase({ studies, setStudies, setTasks }) {
-  const [draft, setDraft] = useState({ subject: '', days: '', links: '', methodology: '', time: '18:00' });
+  const [draft, setDraft] = useState({ subject: '', links: '', methodology: '', time: '18:00', duration: 45 });
+  const [selectedDays, setSelectedDays] = useState(['Seg', 'Qua', 'Sex']);
+  const [weeks, setWeeks] = useState(4);
+  const [editingId, setEditingId] = useState(null);
+
+  const toggleDay = (day) => {
+    setSelectedDays((current) => (current.includes(day) ? current.filter((item) => item !== day) : [...current, day]));
+  };
 
   const submit = (event) => {
     event.preventDefault();
-    if (!draft.subject.trim()) return;
-    const id = crypto.randomUUID();
-    setStudies((current) => [...current, { ...draft, id }]);
+    if (!draft.subject.trim() || selectedDays.length === 0) return;
     
-    // Add as a routine task as well
-    setTasks((current) => [
-      ...current,
-      { 
-        id: Date.now(), 
-        title: draft.subject, 
-        type: 'rotina', 
-        time: draft.time, 
-        duration: 60, 
-        completed: false, 
-        focusLabel: draft.subject 
-      }
-    ].sort((a, b) => a.time.localeCompare(b.time)));
+    if (editingId) {
+      setStudies(current => current.map(s => s.id === editingId ? { ...draft, id: editingId, days: selectedDays.join(', '), weeks } : s));
+      setEditingId(null);
+    } else {
+      const studyId = crypto.randomUUID();
+      const newStudy = { ...draft, id: studyId, days: selectedDays.join(', '), weeks };
+      setStudies((current) => [...current, newStudy]);
+      
+      // Generate Avulsa Tasks (only for new studies to avoid duplicates on simple edits)
+      const newTasks = [];
+      const today = new Date();
+      
+      selectedDays.forEach(dayName => {
+        const dayIndex = weekDays.indexOf(dayName);
+        const targetJsDay = (dayIndex + 1) % 7;
+        
+        for (let w = 0; w < weeks; w++) {
+          const date = new Date(today);
+          let diff = targetJsDay - date.getDay();
+          if (diff < 0) diff += 7;
+          
+          date.setDate(date.getDate() + diff + (w * 7));
+          const dateStr = date.toISOString().split('T')[0];
+          
+          newTasks.push({
+            id: Date.now() + Math.random(),
+            title: `Estudo: ${draft.subject}`,
+            type: 'avulsa',
+            time: draft.time,
+            duration: Number(draft.duration),
+            date: dateStr,
+            completed: false,
+            focusLabel: draft.subject
+          });
+        }
+      });
+      setTasks((current) => [...current, ...newTasks].sort((a, b) => a.time.localeCompare(b.time)));
+    }
 
-    setDraft({ subject: '', days: '', links: '', methodology: '', time: '18:00' });
+    setDraft({ subject: '', links: '', methodology: '', time: '18:00', duration: 45 });
+    setSelectedDays(['Seg', 'Qua', 'Sex']);
+    setWeeks(4);
+  };
+
+  const startEdit = (study) => {
+    setEditingId(study.id);
+    setDraft({ subject: study.subject, links: study.links, methodology: study.methodology, time: study.time, duration: study.duration });
+    setSelectedDays(study.days.split(', '));
+    setWeeks(study.weeks);
+  };
+
+  const deleteStudy = (id) => {
+    if (confirm('Deseja excluir este planejamento? As tarefas já geradas no calendário permanecerão.')) {
+      setStudies(current => current.filter(s => s.id !== id));
+    }
   };
 
   const updateDraft = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
@@ -924,30 +1525,172 @@ function StudyBase({ studies, setStudies, setTasks }) {
   return (
     <section className="study-grid">
       <form className="tool-panel" onSubmit={submit}>
-        <SectionTitle icon={BookOpen} eyebrow="Base" title="Conhecimento" />
-        <label>Nome da materia<input value={draft.subject} onChange={(event) => updateDraft('subject', event.target.value)} /></label>
+        <SectionTitle icon={BookOpen} eyebrow="Base" title={editingId ? "Editar Planejamento" : "Planejamento de Estudos"} />
+        <label>Nome da matéria<input value={draft.subject} onChange={(e) => updateDraft('subject', e.target.value)} /></label>
+        
         <div className="number-grid">
-          <label>Dias programados<input value={draft.days} onChange={(event) => updateDraft('days', event.target.value)} /></label>
-          <label>Horario<input type="time" value={draft.time} onChange={(event) => updateDraft('time', event.target.value)} /></label>
+          <label>Horário<input type="time" value={draft.time} onChange={(e) => updateDraft('time', e.target.value)} /></label>
+          <label>Duração
+            <select value={draft.duration} onChange={(e) => updateDraft('duration', e.target.value)}>
+              {[15, 30, 45, 60].map(d => <option key={d} value={d}>{d} min</option>)}
+            </select>
+          </label>
+          <label>Repetir por (semanas)
+            <input type="number" min="1" max="52" value={weeks} onChange={(e) => setWeeks(Number(e.target.value))} />
+          </label>
         </div>
-        <label>Links em nuvem<input value={draft.links} onChange={(event) => updateDraft('links', event.target.value)} /></label>
-        <label>Descricao da metodologia<textarea value={draft.methodology} onChange={(event) => updateDraft('methodology', event.target.value)} /></label>
-        <button className="primary-action" type="submit"><Plus size={18} /> Adicionar materia</button>
+
+        <label>Dias da semana</label>
+        <div className="day-picker" style={{ marginBottom: '12px' }}>
+          {weekDays.map((day) => (
+            <button 
+              type="button" 
+              className={selectedDays.includes(day) ? 'selected' : ''} 
+              onClick={() => toggleDay(day)} 
+              key={day}
+            >
+              {day}
+            </button>
+          ))}
+        </div>
+
+        <label>Links em nuvem<input value={draft.links} onChange={(e) => updateDraft('links', e.target.value)} /></label>
+        <label>Metodologia<textarea value={draft.methodology} onChange={(e) => updateDraft('methodology', e.target.value)} /></label>
+        
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="primary-action" type="submit" style={{ flex: 1 }}>
+            <Plus size={18} /> {editingId ? "Salvar Alterações" : "Gerar cronograma de estudos"}
+          </button>
+          {editingId && (
+            <button className="primary-action danger-button" type="button" onClick={() => { setEditingId(null); setDraft({ subject: '', links: '', methodology: '', time: '18:00', duration: 45 }); }} style={{ flex: 0.3 }}>
+              Cancelar
+            </button>
+          )}
+        </div>
       </form>
+
       <div className="study-list">
         {studies.map((study) => (
           <article className="study-card" key={study.id}>
             <div className="study-header">
-              <h3>{study.subject}</h3>
-              <strong>{study.time}</strong>
+              <h3 style={{ textTransform: 'none' }}>{study.subject}</h3>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="ghost-icon" onClick={() => startEdit(study)}><NotebookPen size={14} /></button>
+                <button className="ghost-icon" onClick={() => deleteStudy(study.id)} style={{ color: 'var(--crimson)' }}><X size={14} /></button>
+              </div>
             </div>
-            <p>{study.methodology}</p>
-            <span>{study.days}</span>
-            <small>{study.links}</small>
+            <p style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>{study.methodology}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'auto', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem' }}>{study.days}</span>
+              <div style={{ textAlign: 'right' }}>
+                <strong style={{ display: 'block', fontSize: '0.75rem', color: 'var(--crimson)' }}>{study.weeks} SEMANAS</strong>
+                <small style={{ fontSize: '0.65rem', color: 'var(--muted)' }}>{study.time} • {study.duration}m</small>
+              </div>
+            </div>
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function UserManagement({ users, setUsers }) {
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState('user');
+
+  const addUser = (e) => {
+    e.preventDefault();
+    if (!newUsername || !newPassword) return;
+    if (users.find(u => u.username === newUsername)) {
+      alert('Usuário já existe');
+      return;
+    }
+    const newUser = {
+      id: crypto.randomUUID(),
+      username: newUsername,
+      password: newPassword,
+      role: newRole
+    };
+    setUsers([...users, newUser]);
+    setNewUsername('');
+    setNewPassword('');
+    setNewRole('user');
+  };
+
+  const deleteUser = (id) => {
+    if (id === 'admin') return;
+    if (confirm('Tem certeza que deseja excluir este usuário?')) {
+      setUsers(users.filter(u => u.id !== id));
+    }
+  };
+
+  return (
+    <section className="manager-grid">
+      <form className="tool-panel" onSubmit={addUser}>
+        <SectionTitle icon={Users} eyebrow="Administração" title="Criar Usuário" />
+        <label>Nome de usuário<input value={newUsername} onChange={(e) => setNewUsername(e.target.value)} /></label>
+        <label>Senha<input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></label>
+        <label>Cargo
+          <select value={newRole} onChange={(e) => setNewRole(e.target.value)}>
+            <option value="user">Usuário</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </label>
+        <button className="primary-action" type="submit"><Plus size={18} /> Cadastrar</button>
+      </form>
+      <div className="tool-panel wide">
+        <SectionTitle icon={Users} eyebrow="Lista" title="Usuários Cadastrados" />
+        <div className="task-list">
+          {users.map(u => (
+            <div key={u.id} className="task-row" style={{ gridTemplateColumns: '1fr auto' }}>
+              <div>
+                <h3 style={{ textTransform: 'none' }}>{u.username}</h3>
+                <span className="tag">{u.role}</span>
+              </div>
+              {u.id !== 'admin' && (
+                <button className="ghost-icon" onClick={() => deleteUser(u.id)} style={{ color: 'var(--crimson)' }}>
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Login({ onLogin, users }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const user = users.find(u => u.username === username && u.password === password);
+    if (user) {
+      onLogin(user);
+    } else {
+      setError('Credenciais inválidas');
+    }
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <div className="brand" style={{ justifyContent: 'center', marginBottom: '32px' }}>
+          <img src="/imagens/logo_sem_fundo.png" alt="Trail" />
+          <div><span>Trail</span></div>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
+          <label>Usuário<input value={username} onChange={(e) => setUsername(e.target.value)} required /></label>
+          <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {error && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>{error}</p>}
+          <button className="primary-action xl" type="submit">Entrar no Sistema</button>
+        </form>
+      </div>
+    </div>
   );
 }
 

@@ -16,6 +16,12 @@
   box-sizing: border-box;
 }
 
+*,
+*::before,
+*::after {
+  min-width: 0;
+}
+
 html {
   background: var(--obsidian);
 }
@@ -24,6 +30,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   background: var(--obsidian);
   color: var(--ice);
   font-family: 'Poppins', Arial, sans-serif;
@@ -35,6 +42,13 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
 }
 
 button {
@@ -326,6 +340,7 @@ button {
   color: var(--ice);
   font-size: 0.97rem;
   line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
 .task-copy p,
@@ -510,6 +525,8 @@ textarea {
   background: var(--crimson);
   font-weight: 800;
   text-transform: uppercase;
+  text-align: center;
+  white-space: normal;
 }
 
 .primary-action.xl {
@@ -638,54 +655,135 @@ textarea {
   margin-bottom: 12px;
 }
 
-.week-grid {
-  display: grid;
-  grid-template-columns: 62px repeat(7, minmax(116px, 1fr));
-  min-height: 850px;
+.week-grid-new {
+  display: flex;
+  flex-direction: column;
+  min-width: 800px;
+}
+
+.week-grid-container {
+  max-width: 100%;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.time-col,
-.day-col {
+.grid-header-row {
   display: grid;
-  grid-template-rows: 50px repeat(17, 48px);
+  grid-template-columns: 80px repeat(7, minmax(140px, 1fr));
+  border-bottom: 1px solid var(--line);
+  background: var(--carbon);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.time-col span {
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.day-col {
-  position: relative;
+.day-header-cell {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   border-left: 1px solid var(--line);
 }
 
-.day-col strong {
-  padding-left: 8px;
+.day-header-cell span { font-size: 0.8rem; color: var(--muted); }
+.day-header-cell strong { font-size: 0.9rem; text-transform: uppercase; }
+
+.grid-hour-row {
+  display: grid;
+  grid-template-columns: 80px repeat(7, minmax(140px, 1fr));
+  border-bottom: 1px solid #2a2a2d;
+  transition: min-height 0.2s ease;
 }
 
-.hour-slot {
-  border-top: 1px solid #2a2a2d;
+.time-label-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: rgba(28, 28, 30, 0.5);
+  border-right: 1px solid var(--line);
 }
 
-.calendar-block {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  overflow: hidden;
+.time-label-cell span {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.2rem;
+  color: var(--muted);
+}
+
+.day-task-cell {
+  border-left: 1px solid var(--line);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: transparent;
+}
+
+.calendar-item {
+  position: relative;
+  background: rgba(220, 38, 38, 0.15);
   border-left: 3px solid var(--crimson);
-  border-radius: 6px;
-  background: rgba(220, 38, 38, 0.24);
-  padding: 7px;
-  color: var(--ice);
-  font-size: 0.72rem;
-  line-height: 1.25;
+  border-radius: 4px;
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  transition: transform 0.1s;
 }
 
-.calendar-block.complete {
+.calendar-item:hover {
+  transform: scale(1.01);
+  background: rgba(220, 38, 38, 0.25);
+}
+
+.calendar-item.complete {
   border-color: var(--apex);
-  background: rgba(0, 200, 83, 0.2);
+  background: rgba(0, 200, 83, 0.1);
+}
+
+.item-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-content strong {
+  font-size: 0.75rem;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.2;
+}
+
+.item-content span {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.item-actions {
+  display: none;
+  gap: 4px;
+}
+
+.calendar-item:hover .item-actions {
+  display: flex;
+}
+
+.item-actions button {
+  background: var(--obsidian);
+  border: 1px solid var(--line);
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--ice);
+  display: flex;
+  align-items: center;
+}
+
+/* Redefine old classes for cleanup */
+.week-grid, .time-col, .day-col, .hour-slot, .calendar-block {
+  display: none;
 }
 
 .month-grid {
@@ -941,9 +1039,99 @@ textarea {
   cursor: pointer;
 }
 
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--obsidian);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.1) 0%, var(--obsidian) 100%);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+}
+
+.login-card {
+  width: min(400px, 90vw);
+  padding: 40px;
+  background: var(--carbon);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+}
+
+.meal-grid-display {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.meal-day-column {
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.meal-day-column h3 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  margin: 0;
+  text-align: center;
+  color: var(--crimson);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.meal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meal-card {
+  background: var(--carbon);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
+.meal-card strong {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.meal-card p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.workout-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--apex);
+  font-weight: 700;
+}
+
 @media (max-width: 980px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    display: block;
+    min-height: 100vh;
   }
 
   .sidebar {
@@ -954,11 +1142,12 @@ textarea {
   }
 
   .sidebar nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .sidebar-status {
-    display: none;
+  .sidebar-footer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 
   .dashboard-grid,
@@ -966,9 +1155,32 @@ textarea {
   .study-grid {
     grid-template-columns: 1fr;
   }
+
+  .focus-layout {
+    max-width: none;
+  }
+
+  .panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calendar-nav {
+    flex-wrap: wrap;
+  }
 }
 
 @media (max-width: 640px) {
+  .sidebar nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  body {
+    min-width: 0;
+  }
+
   .workspace,
   .sidebar {
     padding: 12px;
@@ -990,7 +1202,7 @@ textarea {
   }
 
   .topbar h1 {
-    font-size: 3rem;
+    font-size: 2.7rem;
   }
 
   .sidebar nav {
@@ -1000,7 +1212,7 @@ textarea {
 
   .nav-item {
     padding: 0 8px;
-    min-height: 40px;
+    min-height: 46px;
     flex-direction: column;
     justify-content: center;
     text-align: center;
@@ -1008,7 +1220,36 @@ textarea {
   }
 
   .nav-item span {
-    font-size: 0.65rem;
+    font-size: 0.63rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .sidebar-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-status {
+    display: none;
+  }
+
+  .daily-panel,
+  .tool-panel,
+  .calendar-panel,
+  .journal-panel,
+  .ring-card,
+  .bar-card,
+  .study-card {
+    padding: 12px;
+  }
+
+  .section-title {
+    align-items: flex-start;
+  }
+
+  .section-title h2 {
+    font-size: 1.65rem;
+    overflow-wrap: anywhere;
   }
 
   .pill-grid {
@@ -1026,34 +1267,49 @@ textarea {
   }
 
   .task-row {
-    grid-template-columns: 48px minmax(0, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr);
     padding: 10px;
     min-height: auto;
+  }
+
+  .task-copy > div {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tag {
+    align-self: flex-start;
   }
 
   .large-time {
     font-size: 1.1rem;
   }
 
-  .week-grid {
-    grid-template-columns: 48px repeat(7, 100px);
-  }
-
-  .time-col, .day-col {
-    grid-template-rows: 40px repeat(17, 44px);
-  }
-
-  .day-header {
-    height: 40px;
-  }
-
-  .day-header strong {
-    font-size: 0.75rem;
-  }
-
-  .calendar-nav {
+  .bar-legend {
     flex-direction: column;
-    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .number-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .day-picker,
+  .segmented {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .day-picker button,
+  .segmented button {
+    width: 100%;
+    padding: 0 8px;
+  }
+
+  .calendar-nav,
+  .editor-header {
+    flex-direction: column;
+    align-items: stretch !important;
     gap: 8px;
   }
 
@@ -1063,15 +1319,95 @@ textarea {
     text-align: left;
   }
 
+  .week-grid-new {
+    min-width: 620px;
+  }
+
+  .grid-header-row,
+  .grid-hour-row {
+    grid-template-columns: 56px repeat(7, minmax(80px, 1fr));
+  }
+
+  .day-header-cell {
+    padding: 8px 4px;
+  }
+
+  .time-label-cell {
+    padding: 6px;
+  }
+
+  .time-label-cell span {
+    font-size: 0.95rem;
+  }
+
+  .calendar-item {
+    padding: 7px;
+  }
+
+  .item-actions {
+    display: flex;
+    flex-shrink: 0;
+  }
+
+  .month-grid {
+    gap: 4px;
+  }
+
+  .month-day {
+    min-height: 72px;
+    padding: 6px 4px;
+  }
+
+  .count-pill {
+    font-size: 0.56rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .meal-grid-display {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+  }
+
+  .meal-day-column {
+    flex: 0 0 min(78vw, 260px);
+    scroll-snap-align: start;
+  }
+
+  .rich-editor {
+    min-height: 300px;
+    padding: 12px;
+  }
+
+  .editor-toolbar button,
+  .upload-button {
+    min-width: 42px;
+  }
+
+  .study-card > div,
+  .history-card,
+  .habit-list p {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .friction-modal form > div:last-child,
+  .study-grid form > div:last-child {
+    flex-direction: column;
+  }
+
+  .login-card {
+    width: min(420px, calc(100vw - 24px));
+    padding: 24px;
+  }
+
   .modal-backdrop {
     padding: 10px;
   }
 
   .friction-modal {
     padding: 16px;
-  }
-
-  .number-grid {
-    grid-template-columns: 1fr;
   }
 }
