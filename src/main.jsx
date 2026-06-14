@@ -135,8 +135,7 @@ const initialTasks = [
     type: 'rotina',
     time: '06:00',
     duration: 60,
-    completed: true,
-    focusLabel: 'Forjar energia fisica para o dia'
+    completed: true
   },
   {
     id: 2,
@@ -144,8 +143,7 @@ const initialTasks = [
     type: 'rotina',
     time: '07:20',
     duration: 35,
-    completed: false,
-    focusLabel: 'Leitura disciplinada'
+    completed: false
   },
   {
     id: 3,
@@ -153,8 +151,7 @@ const initialTasks = [
     type: 'avulsa',
     time: '09:00',
     duration: 120,
-    completed: false,
-    focusLabel: 'Econometria aplicada'
+    completed: false
   },
   {
     id: 4,
@@ -162,8 +159,7 @@ const initialTasks = [
     type: 'avulsa',
     time: '14:00',
     duration: 90,
-    completed: false,
-    focusLabel: 'Pipeline de dados'
+    completed: false
   },
   {
     id: 5,
@@ -171,8 +167,7 @@ const initialTasks = [
     type: 'rotina',
     time: '20:30',
     duration: 50,
-    completed: false,
-    focusLabel: 'Base teorica'
+    completed: false
   }
 ];
 
@@ -1074,7 +1069,6 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
       date: taskDate,
       duration: Number(taskDuration),
       completed: false,
-      focusLabel: taskTitle,
       user_id: user.id
     };
 
@@ -1700,7 +1694,6 @@ function StudyBase({ studies, setStudies, setTasks }) {
               duration: Number(draft.duration),
               date: dateStr,
               completed: false,
-              focusLabel: draft.subject,
               user_id: user.id
             });
           }
