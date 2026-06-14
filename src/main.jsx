@@ -399,13 +399,20 @@ function App() {
   const toggleTask = async (task) => {
     let updatedTask = null;
     let isNewInstance = false;
+    const newCompletedStatus = !task.completed;
 
-    if (task.completed) {
-      setFrictionTask(task);
-      return;
-    }
-    
     if (task.isHabit || task.isMeal || task.isWorkout) {
+        if (!newCompletedStatus) {
+            // Unchecking a generated task that was already saved to DB
+            const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+            if (!error) {
+                setTasks(current => current.filter(t => t.id !== task.id));
+            } else {
+                console.error('Erro ao remover tarefa:', error);
+            }
+            return;
+        }
+
         const date = task.date || getDateKey();
         const sourceType = task.sourceType || (task.isMeal ? 'meal' : task.isWorkout ? 'workout' : 'habit');
         const sourceId = task.sourceId || task.originalId || task.id;
@@ -413,7 +420,7 @@ function App() {
         
         updatedTask = {
           ...task,
-          id: undefined, // Let Supabase handle ID
+          id: undefined, 
           originalId: sourceId,
           sourceId,
           sourceType,
@@ -425,7 +432,7 @@ function App() {
         };
         isNewInstance = true;
     } else {
-        updatedTask = { ...task, completed: true };
+        updatedTask = { ...task, completed: newCompletedStatus };
     }
 
     if (updatedTask) {
@@ -435,7 +442,7 @@ function App() {
             error = err;
             if (data) updatedTask = data[0];
         } else {
-            const { error: err } = await supabase.from('tasks').update({ completed: true }).eq('id', task.id);
+            const { error: err } = await supabase.from('tasks').update({ completed: newCompletedStatus }).eq('id', task.id);
             error = err;
         }
 
@@ -449,7 +456,7 @@ function App() {
                   }
                   return [...current, updatedTask].sort((a, b) => a.time.localeCompare(b.time));
               } else {
-                  return current.map((item) => (item.id === task.id ? { ...item, completed: true } : item));
+                  return current.map((item) => (item.id === task.id ? { ...item, completed: newCompletedStatus } : item));
               }
             });
         } else {
@@ -944,9 +951,17 @@ function Dashboard({ tasks, metrics, onToggleTask }) {
 
 function TaskRow({ task, onToggle }) {
   return (
-    <article className={`task-row ${task.completed ? 'done' : ''}`}>
+    <article 
+      className={`task-row ${task.completed ? 'done' : ''}`} 
+      onClick={onToggle} 
+      style={{ cursor: 'pointer' }}
+    >
       <div className="task-time-check">
-        <button className="check-button" onClick={onToggle} aria-label={task.completed ? 'Marcar como nao concluida' : 'Concluir tarefa'}>
+        <button 
+          className="check-button" 
+          onClick={(e) => { e.stopPropagation(); onToggle(); }} 
+          aria-label={task.completed ? 'Marcar como nao concluida' : 'Concluir tarefa'}
+        >
           {task.completed ? <Check size={18} /> : null}
         </button>
         <span className="large-time">{task.time}</span>
