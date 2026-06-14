@@ -1373,8 +1373,8 @@ function AbsoluteFocus({ session, onExit }) {
     const playAudio = () => {
       if (audioRef.current) {
         audioRef.current.pause();
-        // Adjusting to match the actual files uploaded: focus.mp4 and break.mp3
-        audioRef.current.src = isBreak ? '/break.mp3' : '/focus.mp4';
+        // Adjusting to match the actual files uploaded: focus.mp3 and break.mp3
+        audioRef.current.src = isBreak ? '/break.mp3' : '/focus.mp3';
         audioRef.current.load();
         
         const startPlay = () => {
