@@ -130,6 +130,20 @@ button {
   gap: 18px;
 }
 
+.metrics-visuals {
+  display: grid;
+  gap: 24px;
+}
+
+.empty-state {
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .bar-legend,
 .study-card small,
 .habit-list span {
@@ -450,6 +464,11 @@ button {
 
 .tool-panel.wide {
   grid-column: 1 / -1;
+}
+
+.tool-stack {
+  display: grid;
+  gap: 24px;
 }
 
 label {

@@ -33,6 +33,7 @@ import './styles.css';
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'tasks', label: 'Tarefas', icon: ClipboardList },
+  { id: 'calendar', label: 'Calendário', icon: CalendarDays },
   { id: 'focus', label: 'Foco', icon: Focus },
   { id: 'journal', label: 'Diário', icon: NotebookPen },
   { id: 'studies', label: 'Estudos', icon: BookOpen },
@@ -67,136 +68,101 @@ const getGeneratedTasksForDate = ({ date = new Date(), tasks, habits = [], meals
   const dateKey = getDateKey(date);
   const dayName = getDayName(date);
 
-  const storedTasksForDate = tasks.filter(task => {
-    if (task.type === 'rotina') return !task.date || task.date === dateKey;
-    return task.date === dateKey;
-  });
+  // Filter tasks that already exist in the database for this exact date
+  const storedTasksForDate = tasks.filter(task => task.date === dateKey);
 
-  const storedOccurrenceKeys = new Set(storedTasksForDate.map(getStoredOccurrenceKey).filter(Boolean));
+  // Since we don't have metadata columns in the DB, we match by title for routines
+  const storedTitles = new Set(storedTasksForDate.map(t => t.title.toLowerCase()));
+
+  // We exclude the 'deleted_occurrence' from the final list so they don't show up at all
+  const visibleStoredTasks = storedTasksForDate.filter(t => t.type !== 'deleted_occurrence');
 
   const filteredHabits = habits
-    .filter(h => h.days.includes(dayName) && !storedOccurrenceKeys.has(getOccurrenceKey('habit', h.id, dateKey)))
-    .map(h => ({
-      id: getOccurrenceKey('habit', h.id, dateKey),
-      originalId: h.id,
-      sourceType: 'habit',
-      sourceId: h.id,
-      occurrenceKey: getOccurrenceKey('habit', h.id, dateKey),
-      date: dateKey,
-      title: h.name,
-      type: 'rotina',
-      time: h.time,
-      duration: h.duration || 60,
-      completed: false,
-      isHabit: true
-    }));
+    .filter(h => h.days.includes(dayName) && !storedTitles.has(h.name.toLowerCase()))
+    .map(h => {
+      const occurrenceKey = getOccurrenceKey('habit', h.id, dateKey);
+      return {
+        id: occurrenceKey,
+        originalId: h.id,
+        sourceType: 'habit',
+        sourceId: h.id,
+        occurrenceKey,
+        date: dateKey,
+        title: h.name,
+        type: 'rotina',
+        time: h.time,
+        duration: h.duration || 60,
+        completed: false,
+        isHabit: true
+      };
+    });
 
   const filteredMeals = meals
-    .filter(m => m.day === dayName && !storedOccurrenceKeys.has(getOccurrenceKey('meal', m.id, dateKey)))
-    .map(m => ({
-      id: getOccurrenceKey('meal', m.id, dateKey),
-      originalId: m.id,
-      sourceType: 'meal',
-      sourceId: m.id,
-      occurrenceKey: getOccurrenceKey('meal', m.id, dateKey),
-      date: dateKey,
-      title: `Nutrição: ${m.type} - ${m.description}`,
-      type: 'rotina',
-      time: m.time,
-      duration: 30,
-      completed: false,
-      isMeal: true
-    }));
+    .filter(m => m.day === dayName && !storedTitles.has(`Nutrição: ${m.type} - ${m.description}`.toLowerCase()))
+    .map(m => {
+      const occurrenceKey = getOccurrenceKey('meal', m.id, dateKey);
+      return {
+        id: occurrenceKey,
+        originalId: m.id,
+        sourceType: 'meal',
+        sourceId: m.id,
+        occurrenceKey,
+        date: dateKey,
+        title: `Nutrição: ${m.type} - ${m.description}`,
+        type: 'rotina',
+        time: m.time,
+        duration: 30,
+        completed: false,
+        isMeal: true
+      };
+    });
 
   const filteredWorkouts = workouts
-    .filter(w => w.days.includes(dayName) && !storedOccurrenceKeys.has(getOccurrenceKey('workout', w.id, dateKey)))
-    .map(w => ({
-      id: getOccurrenceKey('workout', w.id, dateKey),
-      originalId: w.id,
-      sourceType: 'workout',
-      sourceId: w.id,
-      occurrenceKey: getOccurrenceKey('workout', w.id, dateKey),
-      date: dateKey,
-      title: `Treino: ${w.title}`,
-      type: 'rotina',
-      time: w.time,
-      duration: 60,
-      completed: false,
-      isWorkout: true
-    }));
+    .filter(w => w.days.includes(dayName) && !storedTitles.has(`Treino: ${w.title}`.toLowerCase()))
+    .map(w => {
+      const occurrenceKey = getOccurrenceKey('workout', w.id, dateKey);
+      return {
+        id: occurrenceKey,
+        originalId: w.id,
+        sourceType: 'workout',
+        sourceId: w.id,
+        occurrenceKey,
+        date: dateKey,
+        title: `Treino: ${w.title}`,
+        type: 'rotina',
+        time: w.time,
+        duration: 60,
+        completed: false,
+        isWorkout: true
+      };
+    });
 
-  return [...storedTasksForDate, ...filteredHabits, ...filteredMeals, ...filteredWorkouts].sort((a, b) => a.time.localeCompare(b.time));
+  return [...visibleStoredTasks, ...filteredHabits, ...filteredMeals, ...filteredWorkouts].sort((a, b) => a.time.localeCompare(b.time));
 };
 
-const initialTasks = [
-  {
-    id: 1,
-    title: 'Treino pesado - membros inferiores',
-    type: 'rotina',
-    time: '06:00',
-    duration: 60,
-    completed: true
-  },
-  {
-    id: 2,
-    title: 'Devocional e leitura de literatura classica russa',
-    type: 'rotina',
-    time: '07:20',
-    duration: 35,
-    completed: false
-  },
-  {
-    id: 3,
-    title: 'Modelar elasticidade-preco com microdados PNAD',
-    type: 'avulsa',
-    time: '09:00',
-    duration: 120,
-    completed: false
-  },
-  {
-    id: 4,
-    title: 'Extrair dados com SQL no BigQuery',
-    type: 'avulsa',
-    time: '14:00',
-    duration: 90,
-    completed: false
-  },
-  {
-    id: 5,
-    title: 'Revisao ativa - inferencia causal',
-    type: 'rotina',
-    time: '20:30',
-    duration: 50,
-    completed: false
-  }
-];
-
-const initialHabits = [
-  { id: 'h1', name: 'Treinar', days: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], time: '06:00' },
-  { id: 'h2', name: 'Devocional', days: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'], time: '07:20' },
-  { id: 'h3', name: 'Leitura tecnica em ingles', days: ['Ter', 'Qui', 'Sab'], time: '21:20' }
-];
-
-const initialStudies = [
-  {
-    id: 's1',
-    subject: 'Econometria - Modelagem Staggered DiD',
-    days: 'Seg, Qua, Sex',
-    links: 'https://papers.ssrn.com, https://github.com/causalinference',
-    methodology: 'Resolver uma prova curta, reimplementar estimadores em R e registrar premissas violadas no diario.'
-  },
-  {
-    id: 's2',
-    subject: 'Engenharia de Dados - BigQuery e dbt',
-    days: 'Ter, Qui',
-    links: 'https://cloud.google.com/bigquery/docs',
-    methodology: 'Criar marts incrementais com testes de qualidade e comparar custo por consulta.'
-  }
-];
+const initialTasks = [];
+const initialHabits = [];
+const initialStudies = [];
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
+
+  // --- NUCLEAR CLEANUP (One-time) ---
+  useEffect(() => {
+    const hasCleaned = localStorage.getItem('trail_cleanup_v2');
+    if (!hasCleaned) {
+      // Clear legacy storage that might contain phantom tasks
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('trail_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      localStorage.setItem('trail_cleanup_v2', 'true');
+      console.log('Storage cleaned. Please refresh one last time.');
+    }
+  }, []);
+  // ----------------------------------
 
   useEffect(() => {
     // 1. Verificar se já existe uma sessão ativa no Supabase ao carregar
@@ -248,7 +214,7 @@ function App() {
         .eq('user_id', uId);
 
       if (!tasksError) {
-        setTasks(dbTasks.length > 0 ? dbTasks.sort((a, b) => a.time.localeCompare(b.time)) : initialTasks.sort((a, b) => a.time.localeCompare(b.time)));
+        setTasks(dbTasks || []);
       }
 
       // 2. Carregar Hábitos do Supabase
@@ -256,9 +222,9 @@ function App() {
         .from('habits')
         .select('*')
         .eq('user_id', uId);
-      
+
       if (!habitsError) {
-        setHabits(dbHabits.length > 0 ? dbHabits : initialHabits);
+        setHabits(dbHabits || []);
       }
 
       // 3. Carregar Diário do Supabase
@@ -336,132 +302,96 @@ function App() {
 
   const todaysTasks = useMemo(() => {
     return getGeneratedTasksForDate({ tasks, habits, meals, workouts });
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const jsDayIndex = new Date().getDay();
-    const dayName = weekDays[jsDayIndex === 0 ? 6 : jsDayIndex - 1];
-
-    const storedTasksForToday = tasks.filter(task => {
-      if (task.type === 'rotina') return !task.date || task.date === todayStr;
-      return task.date === todayStr;
-    });
-
-    // Use a Set to track IDs of generated items that have already been converted to real tasks for today
-    const storedIds = new Set(storedTasksForToday.map(t => t.originalId || t.id));
-
-    const filteredHabits = habits.filter(h => h.days.includes(dayName) && !storedIds.has(h.id)).map(h => ({
-      id: h.id,
-      title: h.name,
-      type: 'rotina',
-      time: h.time,
-      duration: h.duration || 60,
-      completed: false,
-      isHabit: true
-    }));
-
-    const filteredMeals = meals.filter(m => m.day === dayName && !storedIds.has(m.id)).map(m => ({
-      id: m.id,
-      title: `Nutrição: ${m.type} - ${m.description}`,
-      type: 'rotina',
-      time: m.time,
-      duration: 30,
-      completed: false,
-      isMeal: true
-    }));
-
-    const filteredWorkouts = workouts.filter(w => w.days.includes(dayName) && !storedIds.has(w.id)).map(w => ({
-      id: w.id,
-      title: `Treino: ${w.title}`,
-      type: 'rotina',
-      time: w.time,
-      duration: 60,
-      completed: false,
-      isWorkout: true
-    }));
-
-    return [...storedTasksForToday, ...filteredHabits, ...filteredMeals, ...filteredWorkouts].sort((a, b) => a.time.localeCompare(b.time));
   }, [tasks, habits, meals, workouts]);
 
   const metrics = useMemo(() => {
-    if (todaysTasks.length === 0) return { total: 0, completed: 0, pending: 0, routines: 0, adHoc: 0, completionRate: 0 };
-    const completed = todaysTasks.filter((task) => task.completed).length;
-    const routines = todaysTasks.filter((task) => task.type === 'rotina').length;
+    const total = todaysTasks.length;
+    if (total === 0) return { total: 0, completed: 0, pending: 0, routines: 0, adHoc: 0, completionRate: 0 };
+    
+    const completed = todaysTasks.filter(t => t.completed).length;
+    const routines = todaysTasks.filter(t => t.type === 'rotina').length;
+    
     return {
-      total: todaysTasks.length,
+      total,
       completed,
-      pending: todaysTasks.length - completed,
+      pending: total - completed,
       routines,
-      adHoc: todaysTasks.length - routines,
-      completionRate: Math.round((completed / todaysTasks.length) * 100)
+      adHoc: total - routines,
+      completionRate: Math.round((completed / total) * 100)
     };
   }, [todaysTasks]);
 
   const toggleTask = async (task) => {
-    let updatedTask = null;
-    let isNewInstance = false;
     const newCompletedStatus = !task.completed;
+    const isGenerated = task.isHabit || task.isMeal || task.isWorkout;
+    const isMock = typeof task.id === 'number'; // InitialTasks use numbers, DB uses strings/UUIDs
+    const date = task.date || getDateKey();
+    
+    // 1. Optimistic Update
+    setTasks(current => {
+      const exists = current.find(t => t.id === task.id);
+      if (exists) {
+        return current.map(t => t.id === task.id ? { ...t, completed: newCompletedStatus } : t);
+      } else if (isGenerated && newCompletedStatus) {
+        return [...current, { ...task, completed: true }].sort((a, b) => a.time.localeCompare(b.time));
+      }
+      return current;
+    });
 
-    if (task.isHabit || task.isMeal || task.isWorkout) {
-        if (!newCompletedStatus) {
-            // Unchecking a generated task that was already saved to DB
-            const { error } = await supabase.from('tasks').delete().eq('id', task.id);
-            if (!error) {
-                setTasks(current => current.filter(t => t.id !== task.id));
-            } else {
-                console.error('Erro ao remover tarefa:', error);
-            }
-            return;
-        }
+    try {
+      // If it's a generated task OR a mock task being marked for the first time
+      if (isGenerated || (isMock && newCompletedStatus)) {
+        if (newCompletedStatus) {
+          // INSERT only columns that definitely exist in the DB
+          const { data, error } = await supabase
+            .from('tasks')
+            .insert([{
+              title: task.title,
+              time: task.time,
+              duration: Number(task.duration),
+              date: date,
+              completed: true,
+              type: task.type || 'rotina',
+              user_id: currentUser.id
+            }])
+            .select();
 
-        const date = task.date || getDateKey();
-        const sourceType = task.sourceType || (task.isMeal ? 'meal' : task.isWorkout ? 'workout' : 'habit');
-        const sourceId = task.sourceId || task.originalId || task.id;
-        const occurrenceKey = task.occurrenceKey || getOccurrenceKey(sourceType, sourceId, date);
-        
-        updatedTask = {
-          ...task,
-          id: undefined, 
-          originalId: sourceId,
-          sourceId,
-          sourceType,
-          occurrenceKey,
-          date,
-          completed: true,
-          type: 'rotina',
-          user_id: currentUser.id
-        };
-        isNewInstance = true;
-    } else {
-        updatedTask = { ...task, completed: newCompletedStatus };
-    }
-
-    if (updatedTask) {
-        let error;
-        if (isNewInstance) {
-            const { data, error: err } = await supabase.from('tasks').insert([updatedTask]).select();
-            error = err;
-            if (data) updatedTask = data[0];
-        } else {
-            const { error: err } = await supabase.from('tasks').update({ completed: newCompletedStatus }).eq('id', task.id);
-            error = err;
-        }
-
-        if (!error) {
+          if (error) throw error;
+          
+          if (data && data[0]) {
             setTasks(current => {
-              if (isNewInstance) {
-                  const occurrenceKey = updatedTask.occurrenceKey;
-                  const existingIndex = current.findIndex(item => getStoredOccurrenceKey(item) === occurrenceKey);
-                  if (existingIndex >= 0) {
-                    return current.map((item, index) => (index === existingIndex ? { ...item, completed: true } : item));
-                  }
-                  return [...current, updatedTask].sort((a, b) => a.time.localeCompare(b.time));
-              } else {
-                  return current.map((item) => (item.id === task.id ? { ...item, completed: newCompletedStatus } : item));
-              }
+              const filtered = current.filter(t => t.id !== task.id);
+              return [...filtered, data[0]].sort((a, b) => a.time.localeCompare(b.time));
             });
-        } else {
-            console.error('Erro ao atualizar tarefa:', error);
+          }
+        } else if (!isMock) {
+          // Delete from DB if it was already persisted
+          const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+          if (error) throw error;
+          setTasks(current => current.filter(t => t.id !== task.id));
         }
+      } else if (!isMock) {
+        // Normal task UPDATE
+        const { error } = await supabase
+          .from('tasks')
+          .update({ completed: newCompletedStatus })
+          .eq('id', task.id);
+        
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Erro ao sincronizar tarefa:', error);
+      // Revert optimistic update
+      setTasks(current => {
+        const exists = current.find(t => t.id === task.id);
+        if (exists) {
+          return current.map(t => t.id === task.id ? { ...t, completed: !newCompletedStatus } : t);
+        } else if (isGenerated && newCompletedStatus) {
+          return current.filter(t => t.id !== task.id);
+        }
+        return current;
+      });
+      alert('Erro ao atualizar tarefa. Verifique sua conexão.');
     }
   };
 
@@ -495,14 +425,40 @@ function App() {
     setEditingTask(null);
   };
 
-  const deleteTask = (id, applyToAll) => {
-    const taskToDelete = editingTask;
-    if (applyToAll && taskToDelete && taskToDelete.type === 'rotina') {
-      const titleToDelete = taskToDelete.title;
-      setTasks((current) => current.filter((t) => !(t.title === titleToDelete && t.type === 'rotina')));
-      setHabits((current) => current.filter((h) => h.name !== titleToDelete && h.id !== id));
-    } else {
-      setTasks((current) => current.filter((t) => t.id !== id));
+  const deleteTask = async (id, applyToAll) => {
+    const taskToDelete = tasks.find(t => t.id === id) || todaysTasks.find(t => t.id === id);
+    if (!taskToDelete) {
+        // If not found in memory, still try to delete from DB as a last resort
+        await supabase.from('tasks').delete().eq('id', id);
+        setTasks(current => current.filter(t => t.id !== id));
+        return;
+    }
+
+    const isGenerated = taskToDelete.isHabit || taskToDelete.isMeal || taskToDelete.isWorkout;
+
+    try {
+      // 1. Always attempt to delete from the tasks table
+      const { error } = await supabase.from('tasks').delete().eq('id', id);
+      if (error) throw error;
+
+      // 2. If it was a generated task (from habit/meal/workout), 
+      // we must insert a 'deleted_occurrence' record to prevent it from being regenerated for this day.
+      if (isGenerated) {
+        await supabase.from('tasks').insert([{
+          title: taskToDelete.title,
+          time: taskToDelete.time,
+          duration: taskToDelete.duration,
+          date: taskToDelete.date || getDateKey(),
+          completed: false,
+          type: 'deleted_occurrence',
+          user_id: currentUser.id
+        }]);
+      }
+      
+      setTasks(current => current.filter(t => t.id !== id));
+    } catch (error) {
+      console.error('Erro ao deletar tarefa:', error);
+      alert('Erro ao deletar. Verifique sua conexão.');
     }
     setEditingTask(null);
   };
@@ -548,11 +504,21 @@ function App() {
             workouts={workouts}
             onForceFriction={(task) => setFrictionTask(task)}
             onEditTask={setEditingTask}
+            toggleTask={toggleTask}
+            deleteTask={deleteTask}
           />
         )}
         {activeView === 'focus' && <FocusModule tasks={tasks} onStart={setFocusSession} />}
         {activeView === 'calendar' && (
-          <ExecutionCalendar tasks={tasks} setTasks={setTasks} habits={habits} meals={meals} workouts={workouts} onEditTask={setEditingTask} />
+          <ExecutionCalendar 
+            tasks={tasks} 
+            habits={habits} 
+            meals={meals} 
+            workouts={workouts} 
+            onToggleTask={toggleTask} 
+            onDeleteTask={(id) => deleteTask(id, false)} 
+            onEditTask={setEditingTask} 
+          />
         )}
         {activeView === 'journal' && <Journal entries={journalEntries} setEntries={setJournalEntries} />}
         {activeView === 'studies' && <StudyBase studies={studies} setStudies={setStudies} setTasks={setTasks} />}
@@ -690,6 +656,7 @@ function MealPlanner({ meals, setMeals }) {
 }
 
 function WorkoutTracker({ workouts, setWorkouts }) {
+  const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
   const [time, setTime] = useState('07:00');
   const [selectedDays, setSelectedDays] = useState(['Seg']);
@@ -713,7 +680,7 @@ function WorkoutTracker({ workouts, setWorkouts }) {
     setExerciseList(exerciseList.map(ex => ex.id === id ? { ...ex, [field]: value } : ex));
   };
 
-  const addWorkout = async (e) => {
+  const saveWorkout = async (e) => {
     e.preventDefault();
     if (!title.trim() || selectedDays.length === 0) return;
 
@@ -722,7 +689,7 @@ function WorkoutTracker({ workouts, setWorkouts }) {
 
     const validExercises = exerciseList.filter(ex => ex.name.trim());
 
-    const newWorkout = { 
+    const workoutData = { 
       title, 
       time, 
       days: selectedDays.join(', '), 
@@ -730,21 +697,54 @@ function WorkoutTracker({ workouts, setWorkouts }) {
       user_id: user.id
     };
 
-    const { data: savedWorkout, error } = await supabase
-      .from('workouts')
-      .insert([newWorkout])
-      .select();
+    if (editingId) {
+      const { data, error } = await supabase
+        .from('workouts')
+        .update(workoutData)
+        .eq('id', editingId)
+        .select();
 
-    if (!error && savedWorkout) {
-      setWorkouts([...workouts, savedWorkout[0]]);
-      setTitle('');
-      setExerciseList([{ id: crypto.randomUUID(), name: '', sets: '', reps: '' }]);
+      if (!error && data) {
+        setWorkouts(current => current.map(w => w.id === editingId ? data[0] : w));
+        resetForm();
+      } else {
+        console.error('Erro ao atualizar treino:', error);
+      }
     } else {
-      console.error('Erro ao salvar treino:', error);
+      const { data, error } = await supabase
+        .from('workouts')
+        .insert([workoutData])
+        .select();
+
+      if (!error && data) {
+        setWorkouts([...workouts, data[0]]);
+        resetForm();
+      } else {
+        console.error('Erro ao salvar treino:', error);
+      }
     }
   };
 
+  const resetForm = () => {
+    setEditingId(null);
+    setTitle('');
+    setTime('07:00');
+    setSelectedDays(['Seg']);
+    setExerciseList([{ id: crypto.randomUUID(), name: '', sets: '', reps: '' }]);
+  };
+
+  const handleEdit = (workout) => {
+    setEditingId(workout.id);
+    setTitle(workout.title);
+    setTime(workout.time);
+    setSelectedDays(workout.days.split(', '));
+    setExerciseList(workout.exercises.map(ex => ({ ...ex, id: ex.id || crypto.randomUUID() })));
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const deleteWorkout = async (id) => {
+    if (!confirm('Deseja excluir este treino?')) return;
     const { error } = await supabase
       .from('workouts')
       .delete()
@@ -752,6 +752,7 @@ function WorkoutTracker({ workouts, setWorkouts }) {
 
     if (!error) {
       setWorkouts(workouts.filter(w => w.id !== id));
+      if (editingId === id) resetForm();
     } else {
       console.error('Erro ao deletar treino:', error);
     }
@@ -759,8 +760,8 @@ function WorkoutTracker({ workouts, setWorkouts }) {
 
   return (
     <section className="manager-grid">
-      <form className="tool-panel" onSubmit={addWorkout}>
-        <SectionTitle icon={Dumbbell} eyebrow="Performance" title="Definir Treino" />
+      <form className="tool-panel" onSubmit={saveWorkout}>
+        <SectionTitle icon={Dumbbell} eyebrow="Performance" title={editingId ? "Editar Treino" : "Definir Treino"} />
         <label>Título do Treino
           <input value={title} onChange={(e) => setTitle(e.target.value)} required />
         </label>
@@ -824,9 +825,16 @@ function WorkoutTracker({ workouts, setWorkouts }) {
           </button>
         </div>
 
-        <button className="primary-action" type="submit" style={{ marginTop: '12px' }}>
-          <Plus size={18} /> Cadastrar Treino
-        </button>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+          <button className="primary-action" type="submit" style={{ flex: 1 }}>
+            {editingId ? <Check size={18} /> : <Plus size={18} />} {editingId ? 'Atualizar Treino' : 'Cadastrar Treino'}
+          </button>
+          {editingId && (
+            <button className="primary-action danger-button" type="button" onClick={resetForm} style={{ flex: 0.4 }}>
+              Cancelar
+            </button>
+          )}
+        </div>
       </form>
 
       <div className="tool-panel wide">
@@ -842,7 +850,14 @@ function WorkoutTracker({ workouts, setWorkouts }) {
                         <strong style={{ textTransform: 'none', fontSize: '0.9rem' }}>{w.title}</strong>
                         <span style={{ fontSize: '0.65rem', color: 'var(--apex)', fontWeight: 700 }}>{w.time}</span>
                       </div>
-                      <button className="ghost-icon" onClick={() => deleteWorkout(w.id)} style={{ width: '24px', height: '24px' }}><X size={12} /></button>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button className="ghost-icon" onClick={() => handleEdit(w)} style={{ width: '24px', height: '24px' }}>
+                          <NotebookPen size={12} />
+                        </button>
+                        <button className="ghost-icon" onClick={() => deleteWorkout(w.id)} style={{ width: '24px', height: '24px', color: 'var(--crimson)' }}>
+                          <X size={12} />
+                        </button>
+                      </div>
                     </div>
                     <div style={{ marginTop: '8px', borderTop: '1px solid var(--line)', paddingTop: '8px' }}>
                       {Array.isArray(w.exercises) ? w.exercises.map(ex => (
@@ -930,20 +945,44 @@ function Dashboard({ tasks, metrics, onToggleTask }) {
       <div className="daily-panel">
         <SectionTitle icon={ListChecks} eyebrow="Hoje" title="Linha de execução" />
         <div className="task-list">
-          {tasks.map((task) => (
-            <TaskRow key={task.id} task={task} onToggle={() => onToggleTask(task)} />
-          ))}
+          {tasks.length > 0 ? (
+            tasks.map((task) => (
+              <TaskRow key={task.id} task={task} onToggle={() => onToggleTask(task)} />
+            ))
+          ) : (
+            <div className="empty-state">
+              <p>Nenhuma tarefa agendada para hoje.</p>
+            </div>
+          )}
         </div>
       </div>
+      
       <div className="metrics-stack">
         <div className="pill-grid">
+          <MetricPill label="Total" value={metrics.total} />
           <MetricPill label="Concluídas" value={metrics.completed} tone="success" />
           <MetricPill label="Pendentes" value={metrics.pending} tone="danger" />
-          <MetricPill label="Aderência" value={`${metrics.completionRate}%`} />
         </div>
-        <ProgressRing value={metrics.completionRate} />
-        <BarMetric title="Concluídas vs pendentes" leftLabel="Feito" left={metrics.completed} rightLabel="Aberto" right={metrics.pending} />
-        <BarMetric title="Rotina vs avulsa" leftLabel="Rotina" left={metrics.routines} rightLabel="Avulsa" right={metrics.adHoc} />
+        
+        <div className="metrics-visuals">
+          <ProgressRing value={metrics.completionRate} />
+          <div className="bar-metrics-container" style={{ display: 'grid', gap: '16px' }}>
+            <BarMetric 
+              title="Status das Tarefas" 
+              leftLabel="Concluídas" 
+              left={metrics.completed} 
+              rightLabel="Pendentes" 
+              right={metrics.pending} 
+            />
+            <BarMetric 
+              title="Perfil de Execução" 
+              leftLabel="Rotinas" 
+              left={metrics.routines} 
+              rightLabel="Avulsas" 
+              right={metrics.adHoc} 
+            />
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1024,7 +1063,7 @@ function BarMetric({ title, leftLabel, left, rightLabel, right }) {
   );
 }
 
-function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts = [], onForceFriction, onEditTask }) {
+function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts = [], onForceFriction, onEditTask, toggleTask, deleteTask }) {
   const [habitName, setHabitName] = useState('');
   const [habitTime, setHabitTime] = useState('06:00');
   const [habitDuration, setHabitDuration] = useState(30);
@@ -1032,7 +1071,7 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
   const [taskTitle, setTaskTitle] = useState('');
   const [taskTime, setTaskTime] = useState('16:00');
   const [taskDuration, setTaskDuration] = useState(30);
-  const [taskDate, setTaskDate] = useState(new Date().toISOString().split('T')[0]);
+  const [taskDate, setTaskDate] = useState(getDateKey());
 
   const addHabit = async (event) => {
     event.preventDefault();
@@ -1110,6 +1149,18 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
 
   const durationOptions = [15, 30, 45, 60];
 
+  const deleteHabit = async (id) => {
+    if (!confirm('Deseja excluir permanentemente este hábito?')) return;
+    try {
+      const { error } = await supabase.from('habits').delete().eq('id', id);
+      if (error) throw error;
+      setHabits(current => current.filter(h => h.id !== id));
+    } catch (error) {
+      console.error('Erro ao deletar hábito:', error);
+      alert('Erro ao excluir hábito do banco de dados.');
+    }
+  };
+
   return (
     <section className="manager-grid">
       <form className="tool-panel" onSubmit={addHabit}>
@@ -1128,6 +1179,7 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
         </div>
         <button className="primary-action" type="submit"><Plus size={18} /> Cadastrar rotina</button>
       </form>
+
       <form className="tool-panel" onSubmit={addTask}>
         <SectionTitle icon={Plus} eyebrow="Avulsas" title="Demandas únicas" />
         <label>Tarefa<input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} /></label>
@@ -1142,8 +1194,43 @@ function TaskManager({ habits, tasks, setHabits, setTasks, meals = [], workouts 
         </div>
         <button className="primary-action" type="submit"><Plus size={18} /> Forjar tarefa</button>
       </form>
+
       <div className="tool-panel wide">
-        <ExecutionCalendar tasks={tasks} setTasks={setTasks} habits={habits} meals={meals} workouts={workouts} onEditTask={onEditTask} />
+        <ExecutionCalendar 
+          tasks={tasks} 
+          habits={habits} 
+          meals={meals} 
+          workouts={workouts} 
+          onToggleTask={toggleTask}
+          onDeleteTask={(id) => deleteTask(id, false)}
+          onEditTask={onEditTask} 
+        />
+      </div>
+
+      <div className="tool-panel wide">
+        <SectionTitle icon={RotateCcw} eyebrow="Ativos" title="Lista de Hábitos" />
+        <div className="habit-list" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+          {habits.length > 0 ? (
+            habits.map(h => (
+              <div key={h.id} className="task-row" style={{ gridTemplateColumns: '1fr auto', padding: '12px' }}>
+                <div>
+                  <h3 style={{ textTransform: 'none' }}>{h.name}</h3>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <span className="tag rotina">{h.time}</span>
+                    <span className="tag avulsa" style={{ background: 'transparent', border: '1px solid var(--line)' }}>
+                      {Array.isArray(h.days) ? h.days.join(', ') : h.days}
+                    </span>
+                  </div>
+                </div>
+                <button className="ghost-icon" onClick={() => deleteHabit(h.id)} style={{ color: 'var(--crimson)' }}>
+                  <X size={18} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p style={{ color: 'var(--muted)', fontSize: '0.8rem', textAlign: 'center', gridColumn: '1 / -1' }}>Nenhum hábito cadastrado.</p>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -1169,7 +1256,7 @@ function EditTaskModal({ task, onClose, onSave, onDelete }) {
   const [title, setTitle] = useState(task.title);
   const [time, setTime] = useState(task.time);
   const [duration, setDuration] = useState(task.duration || 60);
-  const [date, setDate] = useState(task.date || new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(task.date || getDateKey());
   const [applyToAll, setApplyToAll] = useState(false);
 
   const handleSubmit = (e) => {
@@ -1277,22 +1364,81 @@ function FocusModule({ tasks, onStart }) {
 }
 
 function AbsoluteFocus({ session, onExit }) {
+  const [currentCycle, setCurrentCycle] = useState(1);
+  const [isBreak, setIsBreak] = useState(false);
   const [seconds, setSeconds] = useState(session.study * 60);
+  const audioRef = useRef(null);
 
   useEffect(() => {
-    const interval = setInterval(() => setSeconds((current) => Math.max(current - 1, 0)), 1000);
-    return () => clearInterval(interval);
-  }, []);
+    const playAudio = () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        // Adjusting to match the actual files uploaded: focus.mp4 and break.mp3
+        audioRef.current.src = isBreak ? '/break.mp3' : '/focus.mp4';
+        audioRef.current.load();
+        
+        const startPlay = () => {
+          audioRef.current.play().catch(e => {
+            console.warn("Audio play blocked. User interaction required.");
+          });
+        };
+
+        // Attempt play immediately, and also on first click to bypass browser policy
+        startPlay();
+        window.addEventListener('click', startPlay, { once: true });
+      }
+    };
+
+    playAudio();
+    
+    const interval = setInterval(() => {
+      setSeconds((prev) => {
+        if (prev <= 1) {
+          handlePeriodEnd();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    };
+  }, [isBreak, currentCycle]);
+
+  const handlePeriodEnd = () => {
+    if (!isBreak) {
+      if (currentCycle < session.cycles) {
+        setIsBreak(true);
+        setSeconds(session.breakTime * 60);
+      } else {
+        alert('Sessão de foco concluída!');
+        onExit();
+      }
+    } else {
+      setIsBreak(false);
+      setCurrentCycle(prev => prev + 1);
+      setSeconds(session.study * 60);
+    }
+  };
 
   const minutes = String(Math.floor(seconds / 60)).padStart(2, '0');
   const secs = String(seconds % 60).padStart(2, '0');
 
   return (
     <main className="absolute-focus">
-      <p className="eyebrow">Modo foco absoluto</p>
+      <audio ref={audioRef} loop />
+      <p className="eyebrow">{isBreak ? 'Intervalo' : 'Modo foco absoluto'}</p>
       <div className="focus-clock">{minutes}:{secs}</div>
-      <h1>EXECUÇÃO EM ANDAMENTO</h1>
-      <button onClick={onExit}><Pause size={16} /> Interromper</button>
+      <h1>{isBreak ? 'RECARREGANDO ENERGIAS' : 'EXECUÇÃO EM ANDAMENTO'}</h1>
+      <p style={{ color: 'var(--muted)', marginBottom: '24px' }}>Ciclo {currentCycle} de {session.cycles}</p>
+      <button className="primary-action" onClick={onExit} style={{ background: 'transparent', width: 'auto', padding: '0 24px' }}>
+        <Pause size={16} /> Interromper
+      </button>
     </main>
   );
 }
@@ -1333,58 +1479,10 @@ function ExecutionCalendar({ tasks, setTasks, habits = [], meals = [], workouts 
     setViewDate(newDate);
   };
 
-  const toggleTaskStatus = (id) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-  };
 
-  const deleteTask = (id) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
-  };
 
   const getAllTasksForDate = useCallback((date) => {
     return getGeneratedTasksForDate({ date, tasks, habits, meals, workouts });
-
-    const dateStr = date.toISOString().split('T')[0];
-    const dayName = weekDays[date.getDay() === 0 ? 6 : date.getDay() - 1];
-
-    const storedTasksForDate = tasks.filter(task => {
-      if (task.type === 'rotina') return !task.date || task.date === dateStr;
-      return task.date === dateStr;
-    });
-
-    const storedIds = new Set(storedTasksForDate.map(t => t.originalId || t.id));
-
-    const filteredHabits = habits.filter(h => h.days.includes(dayName) && !storedIds.has(h.id)).map(h => ({
-      id: h.id,
-      title: h.name,
-      type: 'rotina',
-      time: h.time,
-      duration: h.duration || 60,
-      completed: false,
-      isHabit: true
-    }));
-
-    const filteredMeals = meals.filter(m => m.day === dayName && !storedIds.has(m.id)).map(m => ({
-      id: m.id,
-      title: `Nutrição: ${m.type} - ${m.description}`,
-      type: 'rotina',
-      time: m.time,
-      duration: 30,
-      completed: false,
-      isMeal: true
-    }));
-
-    const filteredWorkouts = workouts.filter(w => w.days.includes(dayName) && !storedIds.has(w.id)).map(w => ({
-      id: w.id,
-      title: `Treino: ${w.title}`,
-      type: 'rotina',
-      time: w.time,
-      duration: 60,
-      completed: false,
-      isWorkout: true
-    }));
-
-    return [...storedTasksForDate, ...filteredHabits, ...filteredMeals, ...filteredWorkouts].sort((a, b) => a.time.localeCompare(b.time));
   }, [tasks, habits, meals, workouts]);
 
   const getTasksByHourForDate = (date) => {
@@ -1471,8 +1569,8 @@ function ExecutionCalendar({ tasks, setTasks, habits = [], meals = [], workouts 
                             <span>{task.time} ({task.duration}m)</span>
                           </div>
                           <div className="item-actions">
-                            <button onClick={(e) => { e.stopPropagation(); toggleTaskStatus(task.id); }}><Check size={14} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}><X size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); onToggleTask(task); }}><Check size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}><X size={14} /></button>
                           </div>
                         </div>
                       ))}
@@ -1521,7 +1619,7 @@ function ExecutionCalendar({ tasks, setTasks, habits = [], meals = [], workouts 
   );
 }
 
-function CalendarBlock() { return null; } // Deprecated
+
 
 function Journal({ entries, setEntries }) {
   const [currentId, setCurrentId] = useState(null);
@@ -1700,7 +1798,7 @@ function StudyBase({ studies, setStudies, setTasks }) {
             if (diff < 0) diff += 7;
             
             date.setDate(date.getDate() + diff + (w * 7));
-            const dateStr = date.toISOString().split('T')[0];
+            const dateStr = getDateKey(date);
             
             newTasks.push({
               title: `Estudo: ${draft.subject}`,
