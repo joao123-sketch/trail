@@ -26,7 +26,8 @@ import {
   Underline,
   Users,
   Utensils,
-  X
+  X,
+  MessageCircle
 } from 'lucide-react';
 import './styles.css';
 
@@ -535,6 +536,7 @@ function App() {
           onDelete={deleteTask}
         />
       )}
+      <FeedbackWidget user={currentUser} />
     </div>
   );
 }
@@ -2066,6 +2068,106 @@ function Login({ onLogin }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FeedbackWidget({ user }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [status, setStatus] = useState('idle');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    setStatus('sending');
+    const { error } = await supabase.from('feedbacks').insert([{ 
+      user_id: user.id, 
+      content: text,
+      created_at: new Date().toISOString()
+    }]);
+
+    if (error) {
+      console.error(error);
+      setStatus('error');
+    } else {
+      setStatus('success');
+      setTimeout(() => {
+        setIsOpen(false);
+        setText('');
+        setStatus('idle');
+      }, 2000);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', bottom: '20px', right: '20px', zIndex: 9999 }}>
+      {!isOpen && (
+        <button 
+          onClick={() => setIsOpen(true)}
+          style={{
+            background: 'var(--brand)', 
+            color: 'white', 
+            borderRadius: '50%', 
+            width: '40px', 
+            height: '40px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+          title="Enviar Feedback"
+        >
+          <MessageCircle size={20} />
+        </button>
+      )}
+      {isOpen && (
+        <div style={{
+          background: 'var(--surface)',
+          padding: '20px',
+          borderRadius: '12px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          width: '300px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px',
+          border: '1px solid var(--border)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--text)' }}>Enviar Feedback</h4>
+            <button className="ghost-icon" onClick={() => setIsOpen(false)} style={{ padding: '4px' }}>
+              <X size={16} />
+            </button>
+          </div>
+          <textarea 
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="O que está funcionando? O que pode melhorar?"
+            rows={4}
+            style={{ 
+              width: '100%', 
+              resize: 'none',
+              background: 'var(--bg)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              padding: '8px',
+              fontFamily: 'inherit'
+            }}
+          />
+          {status === 'error' && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>Erro ao enviar. Tente de novo.</p>}
+          {status === 'success' && <p style={{ color: 'var(--brand)', fontSize: '0.8rem', margin: 0 }}>Obrigado pelo feedback!</p>}
+          <button 
+            className="primary-action" 
+            onClick={handleSubmit} 
+            disabled={status === 'sending' || status === 'success' || !text.trim()}
+          >
+            {status === 'sending' ? 'Enviando...' : 'Enviar'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
