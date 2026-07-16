@@ -1984,6 +1984,7 @@ function UserManagement({ users, setUsers }) {
 }
 
 function Login({ onLogin }) {
+  const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -1997,21 +1998,45 @@ function Login({ onLogin }) {
     // Se o usuário não digitar um @, assumimos o domínio @trail.com para facilitar
     const loginEmail = email.includes('@') ? email : `${email}@trail.com`;
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email: loginEmail,
-      password: password,
-    });
-
-    if (authError) {
-      setError('Credenciais inválidas: ' + authError.message);
-      setLoading(false);
-    } else if (data.user) {
-      // Mapeamos o usuário do Supabase para o formato que o App já entende
-      onLogin({
-        id: data.user.id,
-        username: data.user.email.split('@')[0],
-        role: data.user.email.includes('admin') ? 'admin' : 'user'
+    if (isRegistering) {
+      const { data, error: authError } = await supabase.auth.signUp({
+        email: loginEmail,
+        password: password,
       });
+
+      if (authError) {
+        setError('Erro ao cadastrar: ' + authError.message);
+        setLoading(false);
+      } else if (data.user) {
+        if (data.session) {
+          onLogin({
+            id: data.user.id,
+            username: data.user.email.split('@')[0],
+            role: data.user.email.includes('admin') ? 'admin' : 'user'
+          });
+        } else {
+          setError('Cadastro realizado! Verifique seu e-mail ou tente fazer login.');
+          setLoading(false);
+          setIsRegistering(false);
+        }
+      }
+    } else {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: loginEmail,
+        password: password,
+      });
+
+      if (authError) {
+        setError('Credenciais inválidas: ' + authError.message);
+        setLoading(false);
+      } else if (data.user) {
+        // Mapeamos o usuário do Supabase para o formato que o App já entende
+        onLogin({
+          id: data.user.id,
+          username: data.user.email.split('@')[0],
+          role: data.user.email.includes('admin') ? 'admin' : 'user'
+        });
+      }
     }
   };
 
@@ -2027,9 +2052,19 @@ function Login({ onLogin }) {
           <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           {error && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>{error}</p>}
           <button className="primary-action xl" type="submit" disabled={loading}>
-            {loading ? 'Entrando...' : 'Entrar no Sistema'}
+            {loading ? 'Aguarde...' : (isRegistering ? 'Criar Conta' : 'Entrar no Sistema')}
           </button>
         </form>
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button 
+            type="button" 
+            className="ghost-icon" 
+            onClick={() => setIsRegistering(!isRegistering)}
+            style={{ width: '100%', padding: '10px' }}
+          >
+            {isRegistering ? 'Já tem uma conta? Entrar' : 'Não tem conta? Cadastre-se'}
+          </button>
+        </div>
       </div>
     </div>
   );
