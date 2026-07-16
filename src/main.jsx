@@ -27,7 +27,8 @@ import {
   Users,
   Utensils,
   X,
-  MessageCircle
+  MessageCircle,
+  Settings
 } from 'lucide-react';
 import './styles.css';
 
@@ -39,7 +40,8 @@ const navItems = [
   { id: 'journal', label: 'Diário', icon: NotebookPen },
   { id: 'studies', label: 'Estudos', icon: BookOpen },
   { id: 'menu', label: 'Cardápio', icon: Utensils },
-  { id: 'workout', label: 'Treino', icon: Dumbbell }
+  { id: 'workout', label: 'Treino', icon: Dumbbell },
+  { id: 'settings', label: 'Configurações', icon: Settings }
 ];
 
 const weekDays = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
@@ -542,6 +544,7 @@ function App() {
         {activeView === 'menu' && <MealPlanner meals={meals} setMeals={setMeals} />}
         {activeView === 'workout' && <WorkoutTracker workouts={workouts} setWorkouts={setWorkouts} />}
         {activeView === 'admin' && currentUser.role === 'admin' && <UserManagement users={users} setUsers={setUsers} />}
+        {activeView === 'settings' && <SettingsTab user={currentUser} onLogout={handleLogout} />}
       </main>
       {frictionTask && <FrictionModal task={frictionTask} onClose={() => setFrictionTask(null)} onSubmit={registerFriction} />}
       {editingTask && (
@@ -2248,6 +2251,88 @@ function UpdatePassword({ onUpdated }) {
         </form>
       </div>
     </div>
+  );
+}
+
+function SettingsTab({ user, onLogout }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordStatus, setPasswordStatus] = useState('idle');
+  const [deleteStatus, setDeleteStatus] = useState('idle');
+
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (!newPassword.trim()) return;
+    setPasswordStatus('loading');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setPasswordStatus('error');
+      console.error(error);
+    } else {
+      setPasswordStatus('success');
+      setNewPassword('');
+      setTimeout(() => setPasswordStatus('idle'), 3000);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (confirm('Tem certeza absoluta que deseja excluir sua conta? Esta ação não pode ser desfeita e apagará todos os seus dados.')) {
+      setDeleteStatus('loading');
+      const { error } = await supabase.rpc('delete_user');
+      if (error) {
+        console.error(error);
+        setDeleteStatus('error');
+        alert('Erro ao excluir conta. Certifique-se de que a função SQL "delete_user" foi criada no painel do Supabase.');
+      } else {
+        alert('Conta excluída com sucesso.');
+        onLogout();
+      }
+    }
+  };
+
+  return (
+    <section className="manager-grid">
+      <div className="tool-panel">
+        <SectionTitle icon={Settings} eyebrow="Configurações" title="Minha Conta" />
+        
+        <form onSubmit={handleUpdatePassword} style={{ display: 'grid', gap: '15px', marginBottom: '40px' }}>
+          <h4 style={{ margin: 0, color: 'var(--ice)' }}>Mudar Senha</h4>
+          <label>
+            Nova Senha
+            <input 
+              type="password" 
+              value={newPassword} 
+              onChange={(e) => setNewPassword(e.target.value)} 
+              required 
+            />
+          </label>
+          {passwordStatus === 'error' && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>Erro ao atualizar senha.</p>}
+          {passwordStatus === 'success' && <p style={{ color: 'var(--apex)', fontSize: '0.8rem', margin: 0 }}>Senha atualizada com sucesso!</p>}
+          <button className="primary-action" type="submit" disabled={passwordStatus === 'loading'}>
+            {passwordStatus === 'loading' ? 'Atualizando...' : 'Atualizar Senha'}
+          </button>
+        </form>
+
+        <div style={{ borderTop: '1px solid var(--line)', paddingTop: '20px' }}>
+          <h4 style={{ margin: '0 0 15px 0', color: 'var(--crimson)' }}>Zona de Perigo</h4>
+          <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '15px' }}>
+            Excluir sua conta removerá permanentemente todos os seus dados.
+          </p>
+          <button 
+            className="primary-action" 
+            onClick={handleDeleteAccount}
+            disabled={deleteStatus === 'loading'}
+            style={{ background: 'var(--crimson)', color: 'white' }}
+          >
+            {deleteStatus === 'loading' ? 'Excluindo...' : 'Excluir Minha Conta'}
+          </button>
+          {deleteStatus === 'error' && (
+            <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', marginTop: '10px' }}>
+              Falha ao excluir.
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 
