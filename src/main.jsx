@@ -2076,12 +2076,12 @@ function Login({ onLogin }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div className="brand" style={{ justifyContent: 'center', marginBottom: '32px' }}>
-          <img src="/logo_sem_fundo.png" alt="Trail" />
-          <div><span>Trail</span></div>
+        <div className="brand" style={{ justifyContent: 'center', marginBottom: '40px', gap: '20px' }}>
+          <img src="/logo_sem_fundo.png" alt="Trail" style={{ width: '120px', height: '120px' }} />
+          <div><span style={{ fontSize: '4.5rem', fontWeight: 'bold', letterSpacing: '0' }}>Trail</span></div>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
-          <label>Usuário ou E-mail<input value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="ex: joao" /></label>
+          <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           {!isResetting && (
             <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           )}
@@ -2095,7 +2095,7 @@ function Login({ onLogin }) {
             type="button" 
             className="ghost-icon" 
             onClick={() => { setIsRegistering(!isRegistering); setIsResetting(false); }}
-            style={{ width: '100%', padding: '10px' }}
+            style={{ width: '100%', padding: '10px', fontSize: '0.85rem' }}
           >
             {isRegistering ? 'Já tem uma conta? Entrar' : 'Não tem conta? Cadastre-se'}
           </button>
@@ -2236,9 +2236,9 @@ function UpdatePassword({ onUpdated }) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div className="brand" style={{ justifyContent: 'center', marginBottom: '32px' }}>
-          <img src="/logo_sem_fundo.png" alt="Trail" />
-          <div><span>Trail</span></div>
+        <div className="brand" style={{ justifyContent: 'center', marginBottom: '40px', gap: '20px' }}>
+          <img src="/logo_sem_fundo.png" alt="Trail" style={{ width: '120px', height: '120px' }} />
+          <div><span style={{ fontSize: '4.5rem', fontWeight: 'bold', letterSpacing: '0' }}>Trail</span></div>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
           <h3 style={{ textAlign: 'center', margin: 0 }}>Redefinir Senha</h3>
