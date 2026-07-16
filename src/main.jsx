@@ -165,7 +165,15 @@ function App() {
   }, []);
   // ----------------------------------
 
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
+
   useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveringPassword(true);
+      }
+    });
+
     // 1. Verificar se já existe uma sessão ativa no Supabase ao carregar
     async function recoverSession() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -179,6 +187,10 @@ function App() {
       setAuthChecked(true);
     }
     recoverSession();
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   const [users, setUsers] = useState(() => {
@@ -480,6 +492,10 @@ function App() {
   };
 
   if (!authChecked) return <div className="login-screen"><div className="login-card">Carregando sessão...</div></div>;
+
+  if (isRecoveringPassword) {
+    return <UpdatePassword onUpdated={() => setIsRecoveringPassword(false)} />;
+  }
 
   if (!currentUser) {
     return <Login onLogin={setCurrentUser} />;
@@ -1987,6 +2003,7 @@ function UserManagement({ users, setUsers }) {
 
 function Login({ onLogin }) {
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -2000,7 +2017,18 @@ function Login({ onLogin }) {
     // Se o usuário não digitar um @, assumimos o domínio @trail.com para facilitar
     const loginEmail = email.includes('@') ? email : `${email}@trail.com`;
 
-    if (isRegistering) {
+    if (isResetting) {
+      const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, {
+        redirectTo: window.location.origin,
+      });
+      if (error) {
+        setError('Erro: ' + error.message);
+      } else {
+        setError('Link de recuperação enviado para o seu e-mail!');
+        setIsResetting(false);
+      }
+      setLoading(false);
+    } else if (isRegistering) {
       const { data, error: authError } = await supabase.auth.signUp({
         email: loginEmail,
         password: password,
@@ -2051,21 +2079,33 @@ function Login({ onLogin }) {
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
           <label>Usuário ou E-mail<input value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="ex: joao" /></label>
-          <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {!isResetting && (
+            <label>Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          )}
           {error && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>{error}</p>}
           <button className="primary-action xl" type="submit" disabled={loading}>
-            {loading ? 'Aguarde...' : (isRegistering ? 'Criar Conta' : 'Entrar no Sistema')}
+            {loading ? 'Aguarde...' : (isResetting ? 'Enviar Link' : (isRegistering ? 'Criar Conta' : 'Entrar no Sistema'))}
           </button>
         </form>
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+        <div style={{ marginTop: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button 
             type="button" 
             className="ghost-icon" 
-            onClick={() => setIsRegistering(!isRegistering)}
+            onClick={() => { setIsRegistering(!isRegistering); setIsResetting(false); }}
             style={{ width: '100%', padding: '10px' }}
           >
             {isRegistering ? 'Já tem uma conta? Entrar' : 'Não tem conta? Cadastre-se'}
           </button>
+          {!isRegistering && (
+            <button 
+              type="button" 
+              className="ghost-icon" 
+              onClick={() => { setIsResetting(!isResetting); setIsRegistering(false); }}
+              style={{ width: '100%', padding: '10px', fontSize: '0.85rem', color: 'var(--muted)' }}
+            >
+              {isResetting ? 'Voltar para o Login' : 'Esqueci minha senha'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -2106,15 +2146,15 @@ function FeedbackWidget({ user }) {
         <button 
           onClick={() => setIsOpen(true)}
           style={{
-            background: 'var(--brand)', 
-            color: 'white', 
+            background: 'var(--apex)', 
+            color: 'var(--obsidian)', 
             borderRadius: '50%', 
             width: '40px', 
             height: '40px', 
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
             border: 'none',
             cursor: 'pointer'
           }}
@@ -2125,18 +2165,18 @@ function FeedbackWidget({ user }) {
       )}
       {isOpen && (
         <div style={{
-          background: 'var(--surface)',
+          background: 'var(--carbon)',
           padding: '20px',
           borderRadius: '12px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
           width: '300px',
           display: 'flex',
           flexDirection: 'column',
           gap: '12px',
-          border: '1px solid var(--border)'
+          border: '1px solid var(--line)'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--text)' }}>Enviar Feedback</h4>
+            <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--ice)' }}>Enviar Feedback</h4>
             <button className="ghost-icon" onClick={() => setIsOpen(false)} style={{ padding: '4px' }}>
               <X size={16} />
             </button>
@@ -2149,16 +2189,16 @@ function FeedbackWidget({ user }) {
             style={{ 
               width: '100%', 
               resize: 'none',
-              background: 'var(--bg)',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
+              background: 'var(--obsidian)',
+              color: 'var(--ice)',
+              border: '1px solid var(--line)',
               borderRadius: '8px',
               padding: '8px',
               fontFamily: 'inherit'
             }}
           />
           {status === 'error' && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>Erro ao enviar. Tente de novo.</p>}
-          {status === 'success' && <p style={{ color: 'var(--brand)', fontSize: '0.8rem', margin: 0 }}>Obrigado pelo feedback!</p>}
+          {status === 'success' && <p style={{ color: 'var(--apex)', fontSize: '0.8rem', margin: 0 }}>Obrigado pelo feedback!</p>}
           <button 
             className="primary-action" 
             onClick={handleSubmit} 
@@ -2168,6 +2208,45 @@ function FeedbackWidget({ user }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function UpdatePassword({ onUpdated }) {
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      alert('Senha atualizada com sucesso!');
+      onUpdated();
+    }
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <div className="brand" style={{ justifyContent: 'center', marginBottom: '32px' }}>
+          <img src="/logo_sem_fundo.png" alt="Trail" />
+          <div><span>Trail</span></div>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'grid', gap: '20px' }}>
+          <h3 style={{ textAlign: 'center', margin: 0 }}>Redefinir Senha</h3>
+          <p style={{ textAlign: 'center', fontSize: '0.9rem', color: 'var(--muted)', margin: 0 }}>Digite sua nova senha abaixo.</p>
+          <label>Nova Senha<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+          {error && <p style={{ color: 'var(--crimson)', fontSize: '0.8rem', margin: 0 }}>{error}</p>}
+          <button className="primary-action xl" type="submit" disabled={loading}>
+            {loading ? 'Salvando...' : 'Atualizar Senha'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
